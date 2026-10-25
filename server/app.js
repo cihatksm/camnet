@@ -16,7 +16,6 @@ import { attachMjpeg } from './mjpeg.js';
 import { getLanIps } from './util.js';
 import { startVirtualCamera as startObsVirtualCamera, stopVirtualCamera as stopObsVirtualCamera, virtualCameraStatus as obsVirtualCameraStatus } from './obs.js';
 import { startVirtualCamera as startNativeVirtualCamera, stopVirtualCamera as stopNativeVirtualCamera, vcamStatus as nativeVirtualCameraStatus } from './vcam.js';
-import { startVirtualCamera as startNativeVirtualCamera, stopVirtualCamera as stopNativeVirtualCamera, vcamStatus as nativeVirtualCameraStatus } from './vcam.js';
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
 const INDEX_FILE = path.join(DIST_DIR, 'index.html');
