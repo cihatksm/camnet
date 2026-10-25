@@ -114,9 +114,11 @@ function applyFirewall(ports) {
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 460,
-    height: 660,
-    resizable: false,
+    width: 580,
+    height: 800,
+    minWidth: 480,
+    minHeight: 660,
+    resizable: true,
     maximizable: false,
     fullscreenable: false,
     title: 'CamNet',
