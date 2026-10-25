@@ -42,6 +42,10 @@
     facing: 'user'
   });
 
+  let batterySaver = $state(false);
+  let batteryLevel = $state(null);
+  let batteryCharging = $state(false);
+
   let videoEl = $state(null);
   let broadcaster = null;
   let wakeLock = null;
@@ -66,6 +70,9 @@
       reconnecting: 'Reconnecting',
       replaced: 'Replaced'
     })[connState] ?? connState
+  );
+  const lowBattery = $derived(
+    batteryLevel != null && batteryLevel <= 0.2 && !batteryCharging && !batterySaver
   );
 
   $effect(() => {
@@ -151,6 +158,25 @@
       if (document.visibilityState === 'visible' && live) requestWakeLock();
     };
     document.addEventListener('visibilitychange', onVisible);
+
+    // Battery API: show the level and auto-suggest battery saver when low.
+    let battery = null;
+    const syncBattery = () => {
+      if (!battery) return;
+      batteryLevel = battery.level != null ? battery.level : null;
+      batteryCharging = Boolean(battery.charging);
+    };
+    if (navigator.getBattery) {
+      navigator
+        .getBattery()
+        .then((b) => {
+          battery = b;
+          syncBattery();
+          b.addEventListener('levelchange', syncBattery);
+          b.addEventListener('chargingchange', syncBattery);
+        })
+        .catch(() => {});
+    }
 
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
@@ -302,6 +328,11 @@
   function toggleAudio(event) {
     settings.audio = event.currentTarget.checked;
     changeMedia();
+  }
+
+  function toggleBatterySaver(event) {
+    batterySaver = event.currentTarget.checked;
+    broadcaster?.setBatterySaver(batterySaver);
   }
 
   async function loadDevices() {
@@ -463,7 +494,7 @@
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="2.5" y="6" width="13" height="12" rx="3.4" fill="#3ddc97" />
           <path d="M16.5 10.2 21.5 7v10l-5-3.2z" fill="#38bdf8" />
-          <circle cx="9" cy="12" r="2.6" fill="#0b1017" />
+          <circle cx="9" cy="12" r="2.6" fill="#1f2328" />
         </svg>
       </span>
       <span>CamNet<small>camera sharing</small></span>
@@ -661,11 +692,32 @@
               <input type="checkbox" bind:checked={settings.preview} onchange={saveSettings} />
               <span>Show preview</span>
             </label>
+            <label class="switch">
+              <input type="checkbox" checked={batterySaver} onchange={toggleBatterySaver} />
+              <span>Battery saver</span>
+            </label>
             <span class="grow"></span>
+            {#if batteryLevel != null}
+              <span class="battery-pill">
+                <span class="battery-icon" style:width={batteryLevel > 0.15 ? 'auto' : '0'}>
+                  {batteryCharging ? '⚡' : '🔋'}
+                </span>
+                {Math.round(batteryLevel * 100)}%
+              </span>
+            {/if}
             {#if pump}
               <span class="badge badge-info">MJPEG active</span>
             {/if}
           </div>
+
+          {#if lowBattery}
+            <div class="battery-saver-alert">
+              <span>🔋 Battery low — enable battery saver to reduce drain?</span>
+              <button class="btn btn-sm" onclick={() => { batterySaver = true; broadcaster?.setBatterySaver(true); }}>
+                Enable
+              </button>
+            </div>
+          {/if}
         </div>
       </section>
 
@@ -799,7 +851,7 @@
     padding: 0 10px;
     border-radius: 8px;
     border: 1px solid var(--line);
-    background: #0a1018;
+    background: var(--bg-soft);
     color: var(--text);
     font-size: 13px;
     font-weight: 600;
@@ -811,7 +863,7 @@
   }
 
   .cam-name:hover {
-    border-color: #2f445d;
+    border-color: #c8d1da;
   }
 
   .share-layout {
@@ -862,7 +914,7 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    color: var(--muted);
+    color: rgba(232, 238, 247, 0.7);
     font-size: 13px;
   }
 
@@ -888,10 +940,11 @@
 
   .start-overlay h3 {
     font-size: 18px;
+    color: #e8eef7;
   }
 
   .start-overlay p {
-    color: var(--muted);
+    color: rgba(232, 238, 247, 0.65);
     font-size: 13px;
     max-width: 340px;
   }
@@ -902,9 +955,9 @@
     border-radius: 18px;
     display: grid;
     place-items: center;
-    color: #6ee7b7;
-    background: rgba(61, 220, 151, 0.08);
-    border: 1px solid rgba(61, 220, 151, 0.25);
+    color: #3ddc97;
+    background: rgba(61, 220, 151, 0.15);
+    border: 1px solid rgba(61, 220, 151, 0.4);
     margin-bottom: 6px;
   }
 
@@ -923,9 +976,9 @@
     gap: 7px;
     padding: 5px 10px;
     border-radius: 7px;
-    background: rgba(8, 12, 18, 0.72);
-    border: 1px solid rgba(61, 220, 151, 0.35);
-    color: #7bf0bb;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(61, 220, 151, 0.45);
+    color: #4ee0a5;
     font-size: 11px;
     font-weight: 750;
     letter-spacing: 0.09em;
@@ -938,8 +991,8 @@
     bottom: 12px;
     padding: 4px 8px;
     border-radius: 7px;
-    background: rgba(8, 12, 18, 0.7);
-    color: #b7cadf;
+    background: rgba(0, 0, 0, 0.6);
+    color: #d0d7de;
     font-size: 11px;
     backdrop-filter: blur(6px);
   }
@@ -998,8 +1051,8 @@
     width: 34px;
     height: 20px;
     border-radius: 999px;
-    background: #1b2836;
-    border: 1px solid #2a3b50;
+    background: #d0d7de;
+    border: 1px solid #c8d1da;
     position: relative;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
@@ -1014,18 +1067,18 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #8199b1;
+    background: #8b949e;
     transition: transform 0.15s, background 0.15s;
   }
 
   .switch input:checked {
-    background: rgba(61, 220, 151, 0.25);
-    border-color: rgba(61, 220, 151, 0.55);
+    background: rgba(61, 220, 151, 0.3);
+    border-color: rgba(61, 220, 151, 0.6);
   }
 
   .switch input:checked::after {
     transform: translateX(14px);
-    background: #4ae6a4;
+    background: var(--accent);
   }
 
   .switch input:disabled {
@@ -1035,6 +1088,41 @@
 
   .mt {
     margin-top: 14px;
+  }
+
+  .battery-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    color: var(--muted);
+    padding: 3px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--line-soft);
+    background: var(--bg-soft);
+  }
+
+  .battery-icon {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .battery-saver-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(154, 103, 0, 0.35);
+    background: rgba(154, 103, 0, 0.08);
+    font-size: 12.5px;
+    color: var(--warn);
+  }
+
+  .battery-saver-alert button {
+    margin-left: auto;
+    flex: none;
   }
 
   .qr-mini {
@@ -1078,7 +1166,7 @@
     justify-content: space-between;
     gap: 12px;
     padding: 9px 11px;
-    background: #0a1018;
+    background: var(--bg-soft);
     font-size: 12.5px;
   }
 
@@ -1092,7 +1180,7 @@
   }
 
   .stat-row b.ok {
-    color: #6fe0a8;
+    color: #1a7f4e;
   }
 
   .stat-row b.bad {
@@ -1100,7 +1188,7 @@
   }
 
   .copy-path {
-    color: #9fd6c0 !important;
+    color: #116329 !important;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1131,9 +1219,9 @@
     flex: none;
     font-size: 12px;
     font-weight: 800;
-    color: #f87171;
-    border: 1px solid rgba(248, 113, 113, 0.5);
-    background: rgba(248, 113, 113, 0.12);
+    color: var(--danger);
+    border: 1px solid rgba(207, 34, 46, 0.5);
+    background: rgba(207, 34, 46, 0.12);
   }
 
   @media (max-width: 1020px) {

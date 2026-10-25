@@ -1,15 +1,13 @@
 <script>
   import { onMount } from 'svelte';
   import { api, getToken, removeToken, setToken, snapshotUrl } from '../lib/api.js';
-  import { copyText, deviceLabel, formatRelative, isSecureEnough, resolutionLabel, slugify } from '../lib/util.js';
+  import { copyText, deviceLabel, formatRelative, isSecureEnough, resolutionLabel } from '../lib/util.js';
   import { navigate } from '../lib/router.svelte.js';
 
   let cameras = $state([]);
   let info = $state(null);
   let loading = $state(true);
   let error = $state('');
-  let creating = $state(false);
-  let newName = $state('');
   let busy = $state(false);
   let copiedId = $state('');
   let showPair = $state(false);
@@ -22,7 +20,6 @@
   const qrSrc = $derived(`/api/qr.svg?text=${encodeURIComponent(pairUrl)}`);
   const cameraCount = $derived(cameras.length);
   const onlineCount = $derived(cameras.filter((c) => c.online).length);
-  const pathPreview = $derived(`/c/${slugify(newName.trim() || deviceLabel()) || 'camera'}`);
 
   function httpBase() {
     const ip =
@@ -87,27 +84,21 @@
     };
   });
 
-  function openCreate() {
+  async function createCamera() {
+    if (busy) return;
     error = '';
     if (!isSecureEnough()) {
       error = 'Camera sharing requires the HTTPS address.';
       return;
     }
-    newName = deviceLabel();
-    creating = true;
-  }
-
-  async function createCamera() {
-    if (busy) return;
     busy = true;
-    error = '';
     try {
+      // A 4-digit numeric ID is generated automatically — no name required.
       const data = await api('/api/cameras', {
         method: 'POST',
-        body: JSON.stringify({ name: newName.trim() || deviceLabel() })
+        body: JSON.stringify({ name: deviceLabel() })
       });
       setToken(data.camera.id, data.token);
-      creating = false;
       navigate(`/share/${data.camera.id}?start=1`);
     } catch (err) {
       error = err.message || 'Could not create the camera.';
@@ -150,7 +141,7 @@
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="2.5" y="6" width="13" height="12" rx="3.4" fill="#3ddc97" />
           <path d="M16.5 10.2 21.5 7v10l-5-3.2z" fill="#38bdf8" />
-          <circle cx="9" cy="12" r="2.6" fill="#0b1017" />
+          <circle cx="9" cy="12" r="2.6" fill="#1f2328" />
         </svg>
       </span>
       <span>CamNet<small>local camera network</small></span>
@@ -168,7 +159,7 @@
       </svg>
       Connect phone
     </button>
-    <button class="btn btn-primary" onclick={openCreate}>
+    <button class="btn btn-primary" onclick={createCamera}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
         <path d="M12 5v14M5 12h14" />
       </svg>
@@ -193,7 +184,7 @@
         Each device gets a fixed path, and you add each one as a separate Browser Source in OBS.
       </p>
       <div class="hero-actions">
-        <button class="btn btn-primary" onclick={openCreate}>Share camera</button>
+        <button class="btn btn-primary" onclick={createCamera}>Share camera</button>
         {#if httpsHome && !isSecureEnough()}
           <a class="btn" href={httpsHome}>Secure connection (HTTPS)</a>
         {/if}
@@ -272,7 +263,7 @@
           As soon as you start streaming, the OBS link is ready.
         </p>
         <div class="empty-actions">
-          <button class="btn btn-primary" onclick={openCreate}>Create camera</button>
+          <button class="btn btn-primary" onclick={createCamera}>Create camera</button>
           <button class="btn" onclick={() => (showPair = true)}>Connect phone</button>
         </div>
       </div>
@@ -387,37 +378,6 @@
   </footer>
 </main>
 
-{#if creating}
-  <div class="modal-wrap">
-    <div class="modal card card-pad">
-      <h3>New camera</h3>
-      <p class="muted">Choose a name for this device. The path is generated automatically.</p>
-      <div class="field">
-        <label for="cam-name">Camera name</label>
-        <input
-          id="cam-name"
-          class="input"
-          bind:value={newName}
-          maxlength="40"
-          placeholder="e.g. Phone"
-          onkeydown={(e) => e.key === 'Enter' && createCamera()}
-        />
-      </div>
-      <div class="path-preview">
-        <span>Path</span>
-        <code class="mono">{pathPreview}</code>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" onclick={() => (creating = false)} disabled={busy}>Cancel</button>
-        <button class="btn btn-primary" onclick={createCamera} disabled={busy}>
-          {#if busy}<span class="spinner"></span>{/if}
-          Create and start
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
 {#if showPair}
   <div class="modal-wrap">
     <div class="modal card card-pad">
@@ -442,7 +402,7 @@
     padding: 5px 10px;
     border-radius: 8px;
     border: 1px solid var(--line);
-    background: #0a1018;
+    background: var(--bg-soft);
     font-size: 12px;
     color: var(--muted);
   }
@@ -519,7 +479,7 @@
     justify-content: space-between;
     gap: 10px;
     padding: 9px 12px;
-    background: #0a1018;
+    background: var(--bg-soft);
     font-size: 13px;
   }
 
@@ -543,9 +503,9 @@
     display: block;
     padding: 8px 10px;
     border-radius: 8px;
-    background: #070b11;
+    background: var(--bg-soft);
     border: 1px solid var(--line-soft);
-    color: #9fd6c0;
+    color: #116329;
     font-size: 11.5px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -596,8 +556,8 @@
     border-radius: 20px;
     display: grid;
     place-items: center;
-    color: #46617c;
-    background: #0b121b;
+    color: var(--dim);
+    background: var(--bg-soft);
     border: 1px solid var(--line);
     margin-bottom: 8px;
   }
@@ -627,7 +587,7 @@
   }
 
   .cam-card:hover {
-    border-color: #2b4058;
+    border-color: #c8d1da;
     transform: translateY(-1px);
   }
 
@@ -635,7 +595,7 @@
     position: relative;
     aspect-ratio: 16 / 9;
     background:
-      radial-gradient(120% 90% at 50% 0%, #16222f 0%, #0a0f16 70%);
+      radial-gradient(120% 90% at 50% 0%, #f6f8fa 0%, #eaeef2 70%);
     border-bottom: 1px solid var(--line-soft);
     overflow: hidden;
   }
@@ -655,7 +615,7 @@
     align-items: center;
     justify-content: center;
     gap: 9px;
-    color: #4b6379;
+    color: var(--dim);
     font-size: 12.5px;
   }
 
@@ -674,9 +634,9 @@
     bottom: 9px;
     padding: 4px 8px;
     border-radius: 7px;
-    background: rgba(5, 9, 14, 0.72);
+    background: rgba(246, 248, 250, 0.88);
     backdrop-filter: blur(6px);
-    color: #c6d7e8;
+    color: var(--muted);
     font-size: 11px;
   }
 
@@ -706,7 +666,7 @@
   .cam-id {
     font-size: 10.5px;
     color: var(--dim);
-    background: #0a1018;
+    background: var(--bg-soft);
     border: 1px solid var(--line-soft);
     padding: 3px 7px;
     border-radius: 6px;
@@ -722,7 +682,7 @@
   }
 
   .live-text {
-    color: #6fe0a8;
+    color: #1a7f4e;
   }
 
   .cam-actions {
@@ -735,7 +695,7 @@
   }
 
   .ok {
-    color: #6fe0a8;
+    color: #1a7f4e;
   }
 
   .alert-icon {
@@ -747,15 +707,15 @@
     flex: none;
     font-size: 12px;
     font-weight: 800;
-    color: #fbbf24;
-    border: 1px solid rgba(251, 191, 36, 0.45);
-    background: rgba(251, 191, 36, 0.1);
+    color: var(--warn);
+    border: 1px solid rgba(154, 103, 0, 0.4);
+    background: rgba(154, 103, 0, 0.1);
   }
 
   .alert-danger .alert-icon {
-    color: #f87171;
-    border-color: rgba(248, 113, 113, 0.5);
-    background: rgba(248, 113, 113, 0.12);
+    color: var(--danger);
+    border-color: rgba(207, 34, 46, 0.5);
+    background: rgba(207, 34, 46, 0.12);
   }
 
   .alert {
@@ -782,8 +742,8 @@
     border-radius: 7px;
     font-size: 11.5px;
     font-weight: 700;
-    color: #062116;
-    background: linear-gradient(180deg, #4ae6a4, #31cf8b);
+    color: #0a3620;
+    background: linear-gradient(180deg, #3ddc97, #2fb97c);
     margin-bottom: 10px;
   }
 
@@ -816,7 +776,7 @@
     display: grid;
     place-items: center;
     padding: 20px;
-    background: rgba(4, 7, 11, 0.72);
+    background: rgba(31, 35, 40, 0.4);
     backdrop-filter: blur(6px);
   }
 
@@ -850,24 +810,6 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 4px;
-  }
-
-  .path-preview {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 9px 11px;
-    border-radius: 9px;
-    background: #070b11;
-    border: 1px solid var(--line-soft);
-    font-size: 12px;
-    color: var(--dim);
-  }
-
-  .path-preview code {
-    color: #9fd6c0;
-    font-size: 12px;
   }
 
   .qr-box {

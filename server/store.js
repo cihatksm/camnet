@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from './paths.js';
-import { clampNumber, randomHex, safeParse, slugify } from './util.js';
+import { clampNumber, randomHex, safeParse } from './util.js';
 
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const CAMERAS_FILE = path.join(DATA_DIR, 'cameras.json');
@@ -102,14 +102,18 @@ export function createCamera(name) {
     throw err;
   }
   const cleanName = String(name ?? '').trim().slice(0, 40) || 'Camera';
-  const base = slugify(cleanName) || 'camera';
-  // Use the name exactly as the path. Only if the name is already taken do we
-  // append a small numeric suffix (never a random string).
-  let id = base;
-  let suffix = 2;
-  while (getCamera(id)) {
-    id = `${base}-${suffix}`;
-    suffix += 1;
+
+  // Generate a unique 4-digit numeric ID (1000–9999)
+  let id;
+  let attempts = 0;
+  do {
+    id = String(1000 + Math.floor(Math.random() * 9000));
+    attempts++;
+  } while (getCamera(id) && attempts < 200);
+  if (getCamera(id)) {
+    const err = new Error('Could not generate a unique camera ID. Please try again.');
+    err.code = 'ID_GENERATION_FAILED';
+    throw err;
   }
 
   const camera = {

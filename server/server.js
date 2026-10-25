@@ -7,6 +7,7 @@ import { ensureCerts } from './certs.js';
 import { DIST_DIR } from './paths.js';
 import { flushAll, getConfig, loadCameras } from './store.js';
 import { getLanIps } from './util.js';
+import { events } from './events.js';
 
 /**
  * Starts the HTTP + HTTPS servers and returns a handle with the URLs and
@@ -67,6 +68,7 @@ export async function startServer() {
     config,
     ips,
     lan,
+    events,
     httpServer,
     httpsServer,
     httpPort: config.httpPort,

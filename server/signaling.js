@@ -3,6 +3,7 @@ import { getCamera, saveCameras } from './store.js';
 import { runtimeFor } from './state.js';
 import { broadcastViewerCount, relayFrame, send, updateMjpegDemand } from './hub.js';
 import { randomHex } from './util.js';
+import { events } from './events.js';
 
 const HEARTBEAT_MS = 25000;
 
@@ -124,6 +125,7 @@ function attachPublisher(ws, camera, config) {
   rt.mjpegDemand = false;
   camera.lastSeen = Date.now();
   saveCameras();
+  events.emit('publisher-online', { cameraId: camera.id, cameraName: camera.name });
 
   ws.meta = { role: 'publisher', cameraId: camera.id };
 
@@ -186,6 +188,7 @@ function attachPublisher(ws, camera, config) {
     rt.mjpegDemand = false;
     camera.lastSeen = Date.now();
     saveCameras();
+    events.emit('publisher-offline', { cameraId: camera.id, cameraName: camera.name });
 
     // MJPEG HTTP connections are not closed: they resume when the publisher returns.
     for (const viewer of rt.viewers.values()) {

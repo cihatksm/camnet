@@ -30,6 +30,7 @@ export class Broadcaster {
     this.maxHeight = 720;
     this.rotation = 0;
     this.snapshotInterval = 4000;
+    this.batterySaver = false;
 
     this.video = null;
     this.canvasFull = null;
@@ -88,6 +89,17 @@ export class Broadcaster {
     this.replaceVideoTracks(this.videoTrack());
     this.reschedule();
     this.sendStatus(true);
+  }
+
+  /**
+   * Battery saver mode: slow the thumbnail snapshots down and drop MJPEG
+   * quality. The phone's CPU/encoder is the biggest battery drain, so this
+   * trades a slightly slower thumbnail refresh for meaningful battery savings.
+   */
+  setBatterySaver(on) {
+    this.batterySaver = Boolean(on);
+    this.snapshotInterval = this.batterySaver ? 15000 : 4000;
+    this.reschedule();
   }
 
   connect() {
@@ -445,7 +457,13 @@ export class Broadcaster {
     if (!video || video.readyState < 2 || !video.videoWidth) return;
     const now = Date.now();
 
-    if (now - this.lastSnapshot >= this.snapshotInterval) this.captureSnapshot(video);
+    // When the tab is hidden (screen locked / app backgrounded), skip the
+    // thumbnail work entirely. WebRTC is peer-to-peer and unaffected; only
+    // the home-page preview cards lose freshness, which is fine.
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    if (!hidden && now - this.lastSnapshot >= this.snapshotInterval) {
+      this.captureSnapshot(video);
+    }
 
     const processing = this.processingTrack != null;
     if (!this.pumpOn && !processing) return;
@@ -467,7 +485,7 @@ export class Broadcaster {
             .catch(() => {});
         },
         'image/jpeg',
-        this.quality
+        this.batterySaver ? Math.min(this.quality, 0.5) : this.quality
       );
     }
   }

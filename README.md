@@ -10,15 +10,17 @@ CamNet runs a small local server. Any device on the same network opens the web a
 
 - **Multi-device camera sharing** over the local network.
 - **WebRTC** for low latency, with an automatic **MJPEG** fallback.
-- **Stable per-device paths** — every camera gets `/c/<camera-id>`. The path is derived from the camera name (`ck` → `/c/ck`); a numeric suffix is added only if that name is already taken.
+- **Stable per-device paths** — every camera gets a unique 4-digit ID (`/c/4821`). No name is required; the ID is generated automatically.
 - **OBS Browser Source** and **Media Source / VLC Source** support.
 - Live thumbnails, viewer counts and **QR pairing** on the home page.
 - Per-camera settings: resolution, frame rate, quality, microphone, **rotation** (0°/90°/180°/270°) and preview mirror.
 - **Preview off by default** on phones to save battery.
-- **Portable desktop app** (single `.exe`) with a control panel and QR code.
+- **Battery saver mode** and automatic low-battery suggestion to reduce phone drain.
+- **Portable desktop app** (single `.exe`) with a control panel, QR code, and a **Settings &amp; Permissions** panel for managing the firewall rule and registered cameras.
+- **Live notifications** in the desktop app when a device connects or disconnects.
 - **Installable PWA** for phones ("Add to Home Screen").
 - **HTTPS certificate generated automatically** on first run.
-- **No database** — camera data lives in `data/cameras.json`.
+- **No database** — camera data lives in `~/.camnet/cameras.json`.
 - **Nothing is recorded**; the image is only transmitted live.
 - Automatic reconnect when the connection drops.
 
@@ -76,11 +78,14 @@ This produces **`release/CamNet.exe`** (portable, no Node.js required on the tar
 
 What it does:
 
-- **Requires administrator privileges.** If launched normally, it asks for elevation via UAC and exits if you decline. This is needed to open the firewall.
+- **Requires administrator privileges.** The executable is marked to request elevation, so Windows shows a UAC prompt on launch. If it was somehow started normally, it relaunches itself elevated; if you decline the UAC prompt, it shows a clear error and exits. This is needed to open the firewall.
 - **Automatically allows TCP 3000 and 3443 on all network profiles** at startup (`Set-NetFirewallRule -Profile Any`, creating the rule if missing). This fixes the common case where Windows marks the LAN as “Public” and blocks inbound traffic.
 - Starts the HTTP + HTTPS server automatically.
 - Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, and **Open in browser** / **Quit**.
-- Stores cameras, settings and certificates in a **`data` folder next to the executable** (portable).
+- Stores cameras, settings and certificates in **`~/.camnet`** (portable: in the user's profile folder, not next to the executable).
+- Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, a **Cameras** tab for deleting cameras, a **Settings &amp; Permissions** tab for firewall rule management, and **Open in browser** / **Quit**.
+- Stores cameras, settings and certificates in **`~/.camnet`** (portable: in the user's profile folder, not next to the executable).
+- Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, a **Cameras** tab for deleting cameras, a **Settings &amp; Permissions** tab for firewall rule management, and **Open in browser** / **Quit**.
 
 **First launch notes:**
 
@@ -144,14 +149,14 @@ The watch page reconnects automatically. If WebRTC produces no frames within 8 s
 - **Signaling:** browsers connect over `/ws`; the server only relays SDP/ICE messages. Video flows directly from the device to OBS over WebRTC.
 - **MJPEG fallback:** the publisher encodes JPEG frames on a canvas and sends them over WebSocket; the server distributes them to viewers and `.mjpeg` HTTP clients.
 - **Rotation:** when set, the video is drawn to a canvas with the requested rotation and the rotated track is used for both WebRTC and MJPEG.
-- **Persistence:** only the camera list (`data/cameras.json`). Video, audio and recordings never touch disk.
-- **Keys:** each camera's publish key is stored only in the creating browser's `localStorage` and in `data/cameras.json`.
+- **Persistence:** only the camera list (`~/.camnet/cameras.json`). Video, audio and recordings never touch disk.
+- **Keys:** each camera's publish key is stored only in the creating browser's `localStorage` and in `~/.camnet/cameras.json`.
 
 ---
 
 ## Configuration
 
-`data/config.json` is created on first run:
+`~/.camnet/config.json` is created on first run:
 
 ```json
 {
@@ -182,14 +187,15 @@ server/            Node.js server (API, WebSocket signaling, MJPEG)
 src/               Svelte UI
 electron/          Desktop app (Electron main process + control panel)
 public/            Static assets (manifest, service worker, icons)
-data/cameras.json  Registered cameras (id, name, key, settings)
-data/config.json   Server settings
-data/certs/        Auto-generated HTTPS certificate (not committed)
+~/.camnet/         Data folder (created on first run)
+  cameras.json     Registered cameras (id, name, key, settings)
+  config.json      Server settings
+  certs/           Auto-generated HTTPS certificate (not committed)
 dist/              Built UI
 release/           Portable desktop build output
 ```
 
-`data/cameras.json`, `data/certs/` and build outputs are excluded from git.
+`~/.camnet/cameras.json`, `~/.camnet/certs/` and build outputs are excluded from git.
 
 ---
 
@@ -226,7 +232,7 @@ The latest publisher takes over; the previous device is notified.
 
 CamNet is built for **local networks**. Watch pages (`/c/<id>`) require no key, so anyone on your network can watch the cameras. Do not expose it directly to the internet; use a VPN (for example Tailscale) for remote access.
 
-The HTTPS certificate is generated automatically in `data/certs/`. To use your own, place `cert.pem` and `key.pem` there.
+The HTTPS certificate is generated automatically in `~/.camnet/certs/`. To use your own, place `cert.pem` and `key.pem` there.
 
 ---
 
