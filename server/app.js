@@ -14,6 +14,7 @@ import {
 import { dropRuntime, publicCamera, runtimeFor } from './state.js';
 import { attachMjpeg } from './mjpeg.js';
 import { getLanIps } from './util.js';
+import { startVirtualCamera, stopVirtualCamera, virtualCameraStatus } from './obs.js';
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
 const INDEX_FILE = path.join(DIST_DIR, 'index.html');
@@ -58,6 +59,36 @@ export function createApp() {
       iceServers: config.iceServers ?? [],
       maxViewersPerCamera: config.maxViewersPerCamera
     });
+  });
+
+  app.get('/api/obs/status', async (_req, res) => {
+    res.json(await virtualCameraStatus());
+  });
+
+  app.post('/api/obs/virtual-camera/start', async (req, res) => {
+    const cameraId = String(req.body?.cameraId ?? '').trim();
+    if (!cameraId || !getCamera(cameraId)) {
+      res.status(404).json({ error: 'not_found', message: 'Camera not found.' });
+      return;
+    }
+    const config = getConfig();
+    // OBS runs on this machine; loopback is the most reliable base URL.
+    const baseUrl = `http://127.0.0.1:${config.httpPort}`;
+    try {
+      const result = await startVirtualCamera(cameraId, baseUrl);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(502).json({ error: err.code || 'obs_error', message: err.message });
+    }
+  });
+
+  app.post('/api/obs/virtual-camera/stop', async (_req, res) => {
+    try {
+      const result = await stopVirtualCamera();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(502).json({ error: err.code || 'obs_error', message: err.message });
+    }
   });
 
   app.get('/api/cameras', (_req, res) => {

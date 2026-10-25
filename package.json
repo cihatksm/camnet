@@ -1,6 +1,6 @@
 {
   "name": "camnet",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Local network camera sharing and OBS streaming server",
   "author": "cihatksm",
@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "express": "^4.22.3",
+    "obs-websocket-js": "^5.0.8",
     "qrcode": "^1.5.4",
     "selfsigned": "^2.4.1",
     "ws": "^8.22.0"

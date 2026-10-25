@@ -15,6 +15,14 @@ export const DEFAULT_CONFIG = {
   maxViewersPerCamera: 12,
   // Extra STUN/TURN servers for WebRTC. Usually not needed on a local network.
   iceServers: [],
+  // OBS WebSocket connection, used to drive OBS's Virtual Camera.
+  obs: {
+    host: '127.0.0.1',
+    port: 4455,
+    password: '',
+    width: 1280,
+    height: 720
+  },
   defaultWidth: 1280,
   defaultHeight: 720,
   defaultFps: 24,

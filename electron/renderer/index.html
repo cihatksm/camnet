@@ -185,6 +185,51 @@
         border-radius: 10px;
         padding: 6px;
       }
+      .vcam-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .vcam-select {
+        flex: 1;
+        min-width: 0;
+        height: 32px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--text);
+        padding: 0 8px;
+        font-size: 12px;
+        font-family: inherit;
+      }
+      .vcam-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 9px;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .vcam-status::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #8b949e;
+        flex: none;
+      }
+      .vcam-status.online::before {
+        background: var(--accent);
+      }
+      .vcam-status.live::before {
+        background: var(--accent);
+        animation: pulse 2s ease-out infinite;
+      }
+      .vcam-error {
+        margin-top: 6px;
+        font-size: 11.5px;
+        color: var(--danger);
+      }
       .count {
         text-align: center;
         font-size: 12px;
@@ -192,7 +237,7 @@
         margin-bottom: 6px;
       }
       .error {
-        color: #fca5a5;
+        color: var(--danger);
         font-size: 12px;
         text-align: center;
         min-height: 16px;
@@ -360,6 +405,16 @@
       <!-- Dashboard -->
       <section class="panel active" id="panel-dashboard">
         <div class="card">
+          <div class="row"><label>Windows Virtual Camera</label></div>
+          <div class="vcam-row">
+            <select id="vcam-select" class="vcam-select"></select>
+            <button class="primary" id="vcam-toggle" disabled>Start</button>
+          </div>
+          <div id="vcam-status" class="vcam-status">Checking OBS…</div>
+          <div id="vcam-error" class="vcam-error"></div>
+        </div>
+
+        <div class="card">
           <div class="row">
             <label>This computer</label>
             <div class="url-line"><code id="local">—</code><button data-for="local">Copy</button></div>
@@ -454,11 +509,93 @@
     <script>
       const $ = (id) => document.getElementById(id);
 
+      let apiBase = '';
+      let vcamActive = false;
+      let vcamBusy = false;
+
       function setError(message) {
         $('status-dot').classList.add('err');
         $('status-text').textContent = 'Server error';
         $('error').textContent = message;
       }
+
+      async function loadVcamCameras() {
+        try {
+          const cameras = await window.camnet.getCameras();
+          const select = $('vcam-select');
+          const current = select.value;
+          select.innerHTML = '';
+          if (!cameras || cameras.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'No cameras yet';
+            select.appendChild(opt);
+            return;
+          }
+          cameras.forEach((camera) => {
+            const opt = document.createElement('option');
+            opt.value = camera.id;
+            opt.textContent =
+              (camera.name || 'Camera') + ' · /c/' + camera.id + (camera.online ? '' : ' (offline)');
+            select.appendChild(opt);
+          });
+          if (current) select.value = current;
+          else if (cameras[0]) select.value = cameras[0].id;
+        } catch {
+          /* ignore */
+        }
+      }
+
+      async function refreshObs() {
+        if (!apiBase) return;
+        try {
+          const res = await fetch(apiBase + '/api/obs/status');
+          const data = await res.json();
+          vcamActive = Boolean(data.active);
+          const status = $('vcam-status');
+          status.textContent = data.connected
+            ? data.active
+              ? 'OBS connected · Virtual camera is live'
+              : 'OBS connected · Virtual camera is off'
+            : 'OBS not connected — open OBS with the WebSocket server enabled.';
+          status.classList.toggle('online', Boolean(data.connected));
+          status.classList.toggle('live', Boolean(data.active));
+          const btn = $('vcam-toggle');
+          btn.textContent = data.active ? 'Stop' : 'Start';
+          btn.disabled = vcamBusy || !data.connected || (!data.active && !$('vcam-select').value);
+        } catch {
+          vcamActive = false;
+        }
+      }
+
+      async function toggleVcam() {
+        if (vcamBusy || !apiBase) return;
+        const id = $('vcam-select').value;
+        vcamBusy = true;
+        $('vcam-error').textContent = '';
+        $('vcam-toggle').disabled = true;
+        try {
+          const endpoint = vcamActive
+            ? '/api/obs/virtual-camera/stop'
+            : '/api/obs/virtual-camera/start';
+          const res = await fetch(apiBase + endpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(vcamActive ? {} : { cameraId: id })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.message || 'OBS error');
+          toast(vcamActive ? 'Virtual camera stopped' : 'Virtual camera started');
+        } catch (err) {
+          $('vcam-error').textContent = err.message || 'Could not talk to OBS.';
+        } finally {
+          vcamBusy = false;
+          await refreshObs();
+        }
+      }
+
+      $('vcam-toggle').addEventListener('click', toggleVcam);
+      $('vcam-select').addEventListener('change', refreshObs);
 
       function toast(message) {
         const wrap = $('toasts');
@@ -621,11 +758,19 @@
           setError('The server could not be started.');
           return;
         }
+        apiBase = info.localUrl;
         $('local').textContent = info.localUrl;
         $('http').textContent = info.httpUrl;
         $('https').textContent = info.httpsUrl || 'disabled';
         const target = info.httpsUrl || info.httpUrl;
         $('qr').src = `${info.localUrl}/api/qr.svg?text=${encodeURIComponent(target)}`;
+
+        await loadVcamCameras();
+        await refreshObs();
+        setInterval(() => {
+          loadVcamCameras();
+          refreshObs();
+        }, 5000);
 
         try {
           const res = await fetch(`${info.localUrl}/api/cameras`);

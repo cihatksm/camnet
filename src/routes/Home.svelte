@@ -13,6 +13,12 @@
   let showPair = $state(false);
   let failedThumbs = $state({});
 
+  let virtualCamId = $state('');
+  let obsConnected = $state(false);
+  let virtualActive = $state(false);
+  let virtualBusy = $state(false);
+  let virtualError = $state('');
+
   const httpsHome = $derived(
     info?.httpsPort ? `https://${info.primaryIp}:${info.httpsPort}/` : ''
   );
@@ -52,9 +58,56 @@
       const data = await api('/api/cameras');
       cameras = data.cameras ?? [];
       error = '';
+      if (!virtualCamId) {
+        const firstOnline = cameras.find((camera) => camera.online);
+        if (firstOnline) virtualCamId = firstOnline.id;
+      }
     } catch (err) {
       if (!loading) console.warn('failed to load camera list', err);
       error = 'Cannot reach the server.';
+    }
+  }
+
+  async function refreshObs() {
+    try {
+      const data = await api('/api/obs/status');
+      obsConnected = Boolean(data.connected);
+      virtualActive = Boolean(data.active);
+      if (!data.connected && data.error) virtualError = data.error;
+      else if (data.connected) virtualError = '';
+    } catch {
+      obsConnected = false;
+    }
+  }
+
+  async function startVirtual() {
+    if (virtualBusy || !virtualCamId) return;
+    virtualBusy = true;
+    virtualError = '';
+    try {
+      await api('/api/obs/virtual-camera/start', {
+        method: 'POST',
+        body: JSON.stringify({ cameraId: virtualCamId })
+      });
+      await refreshObs();
+    } catch (err) {
+      virtualError = err.message || 'Could not start the OBS virtual camera.';
+    } finally {
+      virtualBusy = false;
+    }
+  }
+
+  async function stopVirtual() {
+    if (virtualBusy) return;
+    virtualBusy = true;
+    virtualError = '';
+    try {
+      await api('/api/obs/virtual-camera/stop', { method: 'POST', body: '{}' });
+      await refreshObs();
+    } catch (err) {
+      virtualError = err.message || 'Could not stop the OBS virtual camera.';
+    } finally {
+      virtualBusy = false;
     }
   }
 
@@ -66,6 +119,7 @@
         /* continue without server info */
       }
       await refresh();
+      await refreshObs();
       loading = false;
     })();
 
@@ -73,13 +127,21 @@
       if (!document.hidden) refresh();
     }, 2500);
 
+    const obsTimer = setInterval(() => {
+      if (!document.hidden) refreshObs();
+    }, 5000);
+
     const onVisible = () => {
-      if (!document.hidden) refresh();
+      if (!document.hidden) {
+        refresh();
+        refreshObs();
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       clearInterval(timer);
+      clearInterval(obsTimer);
       document.removeEventListener('visibilitychange', onVisible);
     };
   });
@@ -239,6 +301,56 @@
       <div>{error}</div>
     </div>
   {/if}
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Windows Virtual Camera</h2>
+      <span class="muted">Use CamNet as a webcam in Zoom, Teams, Discord…</span>
+    </div>
+    <div class="card card-pad virtual-card">
+      <div class="virtual-row">
+        <div class="virtual-field">
+          <label for="virtual-cam">Camera</label>
+          <select id="virtual-cam" class="select" bind:value={virtualCamId}>
+            <option value="">Select a camera…</option>
+            {#each cameras as camera (camera.id)}
+              <option value={camera.id}>
+                {camera.name} · /c/{camera.id}{camera.online ? '' : ' (offline)'}
+              </option>
+            {/each}
+          </select>
+        </div>
+        {#if virtualActive}
+          <button class="btn btn-danger" onclick={stopVirtual} disabled={virtualBusy}>
+            {virtualBusy ? 'Stopping…' : 'Stop virtual camera'}
+          </button>
+        {:else}
+          <button class="btn btn-primary" onclick={startVirtual} disabled={virtualBusy || !virtualCamId}>
+            {virtualBusy ? 'Starting…' : 'Start virtual camera'}
+          </button>
+        {/if}
+      </div>
+
+      <div class="virtual-status">
+        <span class="dot" class:live={obsConnected}></span>
+        {#if obsConnected}
+          OBS connected{virtualActive ? ' · Virtual camera is live' : ''}
+        {:else}
+          OBS not connected — open OBS with the WebSocket server enabled.
+        {/if}
+      </div>
+
+      {#if virtualError}
+        <div class="virtual-error">{virtualError}</div>
+      {/if}
+
+      <p class="hint">
+        Starts OBS's Virtual Camera and adds a Browser Source for the selected camera.
+        Then pick <b>OBS Virtual Camera</b> in Zoom, Teams, Discord or the Windows Camera app.
+        Prefer no OBS? Open the <a href={virtualCamId ? `/c/${virtualCamId}` : '/'} target="_blank" rel="noreferrer">direct camera page</a> instead.
+      </p>
+    </div>
+  </section>
 
   <section class="section">
     <div class="section-head">
@@ -825,6 +937,55 @@
     width: 220px;
     height: 220px;
     display: block;
+  }
+
+  .virtual-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .virtual-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .virtual-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 220px;
+  }
+
+  .virtual-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--dim);
+  }
+
+  .virtual-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .virtual-status .dot {
+    color: var(--dim);
+  }
+
+  .virtual-status .dot.live {
+    color: var(--accent);
+    animation: pulse 2s ease-out infinite;
+  }
+
+  .virtual-error {
+    font-size: 12.5px;
+    color: var(--danger);
   }
 
   @media (max-width: 900px) {
