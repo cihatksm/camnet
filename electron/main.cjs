@@ -1,9 +1,71 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
-const path = require('path');
-const { pathToFileURL } = require('url');
+const { spawn, execFile, execFileSync } = require('node:child_process');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
 let server = null;
 let quitting = false;
+
+function psQuote(value) {
+  return String(value).replace(/'/g, "''");
+}
+
+function isAdmin() {
+  try {
+    const output = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        '([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'
+      ],
+      { encoding: 'utf8', windowsHide: true, timeout: 15000 }
+    );
+    return output.trim().toLowerCase() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The app must run as administrator: it needs to open the firewall ports so
+ * phones on the LAN can reach it. If it was started normally, relaunch the
+ * same executable elevated via UAC and exit this instance.
+ */
+function relaunchElevated() {
+  const packaged = app.isPackaged;
+  const target = packaged
+    ? process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
+    : process.execPath;
+  const args = packaged ? [] : process.argv.slice(1);
+
+  const argList = args.length
+    ? ` -ArgumentList @(${args.map((arg) => `'${psQuote(arg)}'`).join(',')})`
+    : '';
+  const script =
+    `Start-Process -FilePath '${psQuote(target)}'` +
+    ` -WorkingDirectory '${psQuote(process.cwd())}'` +
+    argList +
+    ' -Verb RunAs';
+
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  try {
+    const child = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded],
+      { detached: true, stdio: 'ignore', windowsHide: true }
+    );
+    child.unref();
+  } catch (err) {
+    console.error('Could not request administrator privileges:', err);
+  }
+  process.exit(0);
+}
+
+if (!isAdmin()) {
+  relaunchElevated();
+}
 
 function dataDir() {
   if (process.env.CAMNET_DATA_DIR) return process.env.CAMNET_DATA_DIR;
@@ -22,6 +84,32 @@ async function startBackend() {
   );
   server = await serverModule.startServer();
   return server;
+}
+
+/**
+ * Ensures the Windows Firewall rule allows the configured ports on every
+ * network profile (Domain, Private and Public). Runs elevated, so no UAC.
+ */
+function applyFirewall(ports) {
+  if (!ports) return;
+  const script =
+    "$name='CamNet'; " +
+    "$rule=Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue; " +
+    'if($rule){ ' +
+    'Set-NetFirewallRule -DisplayName $name -Profile Any -Enabled True -Action Allow -ErrorAction SilentlyContinue ' +
+    '} else { ' +
+    `New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${ports} -Profile Any -ErrorAction SilentlyContinue | Out-Null ` +
+    '}';
+
+  execFile(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    { windowsHide: true, timeout: 20000 },
+    (err) => {
+      if (err) console.error('[firewall] could not apply rule:', err.message);
+      else console.log('[firewall] CamNet is allowed on all network profiles');
+    }
+  );
 }
 
 function createWindow() {
@@ -70,6 +158,13 @@ app.whenReady().then(async () => {
   } catch (err) {
     startError = err;
     console.error('Failed to start the server:', err);
+  }
+
+  if (server) {
+    const ports = [server.httpPort, server.httpsPort]
+      .filter((port) => Number(port) > 0)
+      .join(',');
+    applyFirewall(ports);
   }
 
   const win = createWindow();

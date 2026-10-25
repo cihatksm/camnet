@@ -76,6 +76,8 @@ This produces **`release/CamNet.exe`** (portable, no Node.js required on the tar
 
 What it does:
 
+- **Requires administrator privileges.** If launched normally, it asks for elevation via UAC and exits if you decline. This is needed to open the firewall.
+- **Automatically allows TCP 3000 and 3443 on all network profiles** at startup (`Set-NetFirewallRule -Profile Any`, creating the rule if missing). This fixes the common case where Windows marks the LAN as “Public” and blocks inbound traffic.
 - Starts the HTTP + HTTPS server automatically.
 - Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, and **Open in browser** / **Quit**.
 - Stores cameras, settings and certificates in a **`data` folder next to the executable** (portable).
@@ -83,8 +85,8 @@ What it does:
 **First launch notes:**
 
 - Windows SmartScreen may warn because the executable is unsigned: choose **More info → Run anyway**.
-- If phones cannot connect, run **`allow-firewall.bat`** (as administrator) to allow TCP ports **3000** and **3443** on all network profiles. Windows often marks the LAN as “Public”, which blocks inbound traffic by default.
 - Make sure ports 3000/3443 are free (stop `npm run dev` / `npm start` before launching the app).
+- If you prefer not to use the desktop app, `allow-firewall.bat` is still available as a standalone firewall fix.
 
 ---
 
