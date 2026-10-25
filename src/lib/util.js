@@ -60,3 +60,21 @@ export function formatBitrate(bps) {
   if (bps < 1_000_000) return `${Math.round(bps / 1000)} kbps`;
   return `${(bps / 1_000_000).toFixed(1)} Mbps`;
 }
+
+const TR_MAP = {
+  ç: 'c', Ç: 'c', ğ: 'g', Ğ: 'g', ı: 'i', İ: 'i', ö: 'o', Ö: 'o', ş: 's', Ş: 's', ü: 'u', Ü: 'u',
+  â: 'a', Â: 'a', î: 'i', Î: 'i', û: 'u', Û: 'u'
+};
+
+/** Mirrors the server's slugifier so the UI can preview the camera path. */
+export function slugify(value, max = 26) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[çÇğĞıİöÖşŞüÜâÂîÎûÛ]/g, (ch) => TR_MAP[ch] ?? ch)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, max);
+}

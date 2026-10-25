@@ -10,7 +10,7 @@ CamNet runs a small local server. Any device on the same network opens the web a
 
 - **Multi-device camera sharing** over the local network.
 - **WebRTC** for low latency, with an automatic **MJPEG** fallback.
-- **Stable per-device paths** — every camera gets `/c/<camera-id>`.
+- **Stable per-device paths** — every camera gets `/c/<camera-id>`. The path is derived from the camera name (`ck` → `/c/ck`); a numeric suffix is added only if that name is already taken.
 - **OBS Browser Source** and **Media Source / VLC Source** support.
 - Live thumbnails, viewer counts and **QR pairing** on the home page.
 - Per-camera settings: resolution, frame rate, quality, microphone, **rotation** (0°/90°/180°/270°) and preview mirror.

@@ -60,7 +60,7 @@ let saveTimer = null;
 function normalizeCamera(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const id = String(raw.id ?? '').trim();
-  if (!/^[a-z0-9][a-z0-9-]{1,40}$/.test(id)) return null;
+  if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(id)) return null;
   return {
     id,
     name: String(raw.name ?? 'Camera').slice(0, 40),
@@ -103,8 +103,14 @@ export function createCamera(name) {
   }
   const cleanName = String(name ?? '').trim().slice(0, 40) || 'Camera';
   const base = slugify(cleanName) || 'camera';
-  let id = `${base}-${randomHex(2)}`;
-  while (getCamera(id)) id = `${base}-${randomHex(3)}`;
+  // Use the name exactly as the path. Only if the name is already taken do we
+  // append a small numeric suffix (never a random string).
+  let id = base;
+  let suffix = 2;
+  while (getCamera(id)) {
+    id = `${base}-${suffix}`;
+    suffix += 1;
+  }
 
   const camera = {
     id,

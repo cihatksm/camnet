@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api, getToken, removeToken, setToken, snapshotUrl } from '../lib/api.js';
-  import { copyText, deviceLabel, formatRelative, isSecureEnough, resolutionLabel } from '../lib/util.js';
+  import { copyText, deviceLabel, formatRelative, isSecureEnough, resolutionLabel, slugify } from '../lib/util.js';
   import { navigate } from '../lib/router.svelte.js';
 
   let cameras = $state([]);
@@ -22,6 +22,7 @@
   const qrSrc = $derived(`/api/qr.svg?text=${encodeURIComponent(pairUrl)}`);
   const cameraCount = $derived(cameras.length);
   const onlineCount = $derived(cameras.filter((c) => c.online).length);
+  const pathPreview = $derived(`/c/${slugify(newName.trim() || deviceLabel()) || 'camera'}`);
 
   function httpBase() {
     const ip =
@@ -401,6 +402,10 @@
           placeholder="e.g. Phone"
           onkeydown={(e) => e.key === 'Enter' && createCamera()}
         />
+      </div>
+      <div class="path-preview">
+        <span>Path</span>
+        <code class="mono">{pathPreview}</code>
       </div>
       <div class="modal-actions">
         <button class="btn" onclick={() => (creating = false)} disabled={busy}>Cancel</button>
@@ -845,6 +850,24 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 4px;
+  }
+
+  .path-preview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 11px;
+    border-radius: 9px;
+    background: #070b11;
+    border: 1px solid var(--line-soft);
+    font-size: 12px;
+    color: var(--dim);
+  }
+
+  .path-preview code {
+    color: #9fd6c0;
+    font-size: 12px;
   }
 
   .qr-box {

@@ -19,10 +19,10 @@ export function navigate(to, { replace = false } = {}) {
 
 export function parseRoute(path) {
   if (path === '/' || path === '') return { name: 'home' };
-  let match = /^\/share\/([a-z0-9][a-z0-9-]{1,40})\/?$/i.exec(path);
+  let match = /^\/share\/([a-z0-9][a-z0-9-]{0,40})\/?$/i.exec(path);
   if (match) return { name: 'share', id: match[1] };
   if (/^\/share\/?$/i.test(path)) return { name: 'home' };
-  match = /^\/(?:c|watch)\/([a-z0-9][a-z0-9-]{1,40})\/?$/i.exec(path);
+  match = /^\/(?:c|watch)\/([a-z0-9][a-z0-9-]{0,40})\/?$/i.exec(path);
   if (match) return { name: 'watch', id: match[1] };
   return { name: 'notfound' };
 }

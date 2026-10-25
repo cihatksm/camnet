@@ -150,7 +150,7 @@ export function createApp() {
 
   // --------------------------------------------------------- MJPEG (OBS/VLC)
 
-  app.get(/^\/c\/([a-z0-9][a-z0-9-]{1,40})\.mjpeg$/i, (req, res) => {
+  app.get(/^\/c\/([a-z0-9][a-z0-9-]{0,40})\.mjpeg$/i, (req, res) => {
     const camera = getCamera(req.params[0]);
     if (!camera) {
       res.status(404).type('text/plain').send('Camera not found.');
