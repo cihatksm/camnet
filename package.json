@@ -64,6 +64,7 @@
     "files": [
       "electron/**/*",
       "server/**/*",
+      "native/**/*",
       "dist/**/*",
       "package.json"
     ],

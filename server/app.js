@@ -14,7 +14,9 @@ import {
 import { dropRuntime, publicCamera, runtimeFor } from './state.js';
 import { attachMjpeg } from './mjpeg.js';
 import { getLanIps } from './util.js';
-import { startVirtualCamera, stopVirtualCamera, virtualCameraStatus } from './obs.js';
+import { startVirtualCamera as startObsVirtualCamera, stopVirtualCamera as stopObsVirtualCamera, virtualCameraStatus as obsVirtualCameraStatus } from './obs.js';
+import { startVirtualCamera as startNativeVirtualCamera, stopVirtualCamera as stopNativeVirtualCamera, vcamStatus as nativeVirtualCameraStatus } from './vcam.js';
+import { startVirtualCamera as startNativeVirtualCamera, stopVirtualCamera as stopNativeVirtualCamera, vcamStatus as nativeVirtualCameraStatus } from './vcam.js';
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
 const INDEX_FILE = path.join(DIST_DIR, 'index.html');
@@ -62,7 +64,7 @@ export function createApp() {
   });
 
   app.get('/api/obs/status', async (_req, res) => {
-    res.json(await virtualCameraStatus());
+    res.json(await obsVirtualCameraStatus());
   });
 
   app.post('/api/obs/virtual-camera/start', async (req, res) => {
@@ -84,10 +86,39 @@ export function createApp() {
 
   app.post('/api/obs/virtual-camera/stop', async (_req, res) => {
     try {
-      const result = await stopVirtualCamera();
+      const result = await stopObsVirtualCamera();
       res.json({ ok: true, ...result });
     } catch (err) {
       res.status(502).json({ error: err.code || 'obs_error', message: err.message });
+    }
+  });
+
+  app.get('/api/vcam/status', (_req, res) => {
+    res.json(nativeVirtualCameraStatus());
+  });
+
+  app.post('/api/vcam/start', async (req, res) => {
+    const cameraId = String(req.body?.cameraId ?? '').trim();
+    if (!cameraId || !getCamera(cameraId)) {
+      res.status(404).json({ error: 'not_found', message: 'Camera not found.' });
+      return;
+    }
+    const config = getConfig();
+    const baseUrl = `http://127.0.0.1:${config.httpPort}`;
+    try {
+      const result = await startNativeVirtualCamera(cameraId, baseUrl);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(502).json({ error: 'vcam_error', message: err.message });
+    }
+  });
+
+  app.post('/api/vcam/stop', async (_req, res) => {
+    try {
+      const result = await stopNativeVirtualCamera();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(502).json({ error: 'vcam_error', message: err.message });
     }
   });
 

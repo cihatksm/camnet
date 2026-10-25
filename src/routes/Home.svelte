@@ -18,6 +18,9 @@
   let virtualActive = $state(false);
   let virtualBusy = $state(false);
   let virtualError = $state('');
+  let nativeVcamActive = $state(false);
+  let nativeVcamBusy = $state(false);
+  let nativeVcamError = $state('');
 
   const httpsHome = $derived(
     info?.httpsPort ? `https://${info.primaryIp}:${info.httpsPort}/` : ''
@@ -80,6 +83,46 @@
     }
   }
 
+  async function refreshNativeVcam() {
+    try {
+      const data = await api('/api/vcam/status');
+      nativeVcamActive = Boolean(data.running);
+    } catch {
+      nativeVcamActive = false;
+    }
+  }
+
+  async function startNativeVirtualCamera() {
+    if (nativeVcamBusy || !virtualCamId) return;
+    nativeVcamBusy = true;
+    nativeVcamError = '';
+    try {
+      await api('/api/vcam/start', {
+        method: 'POST',
+        body: JSON.stringify({ cameraId: virtualCamId })
+      });
+      await refreshNativeVcam();
+    } catch (err) {
+      nativeVcamError = err.message || 'Could not start native virtual camera.';
+    } finally {
+      nativeVcamBusy = false;
+    }
+  }
+
+  async function stopNativeVirtualCamera() {
+    if (nativeVcamBusy) return;
+    nativeVcamBusy = true;
+    nativeVcamError = '';
+    try {
+      await api('/api/vcam/stop', { method: 'POST', body: '{}' });
+      await refreshNativeVcam();
+    } catch (err) {
+      nativeVcamError = err.message || 'Could not stop native virtual camera.';
+    } finally {
+      nativeVcamBusy = false;
+    }
+  }
+
   async function startVirtual() {
     if (virtualBusy || !virtualCamId) return;
     virtualBusy = true;
@@ -120,6 +163,7 @@
       }
       await refresh();
       await refreshObs();
+      await refreshNativeVcam();
       loading = false;
     })();
 
@@ -131,10 +175,15 @@
       if (!document.hidden) refreshObs();
     }, 5000);
 
+    const nativeVcamTimer = setInterval(() => {
+      if (!document.hidden) refreshNativeVcam();
+    }, 5000);
+
     const onVisible = () => {
       if (!document.hidden) {
         refresh();
         refreshObs();
+        refreshNativeVcam();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -142,6 +191,7 @@
     return () => {
       clearInterval(timer);
       clearInterval(obsTimer);
+      clearInterval(nativeVcamTimer);
       document.removeEventListener('visibilitychange', onVisible);
     };
   });
@@ -348,6 +398,56 @@
         Starts OBS's Virtual Camera and adds a Browser Source for the selected camera.
         Then pick <b>OBS Virtual Camera</b> in Zoom, Teams, Discord or the Windows Camera app.
         Prefer no OBS? Open the <a href={virtualCamId ? `/c/${virtualCamId}` : '/'} target="_blank" rel="noreferrer">direct camera page</a> instead.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Native Virtual Camera (Experimental)</h2>
+      <span class="muted">OBS-free virtual camera using Windows Media Foundation</span>
+    </div>
+    <div class="card card-pad virtual-card">
+      <div class="virtual-row">
+        <div class="virtual-field">
+          <label for="native-virtual-cam">Camera</label>
+          <select id="native-virtual-cam" class="select" bind:value={virtualCamId}>
+            <option value="">Select a camera…</option>
+            {#each cameras as camera (camera.id)}
+              <option value={camera.id}>
+                {camera.name} · /c/{camera.id}{camera.online ? '' : ' (offline)'}
+              </option>
+            {/each}
+          </select>
+        </div>
+        {#if nativeVcamActive}
+          <button class="btn btn-danger" onclick={stopNativeVirtualCamera} disabled={nativeVcamBusy}>
+            {nativeVcamBusy ? 'Stopping…' : 'Stop native camera'}
+          </button>
+        {:else}
+          <button class="btn btn-primary" onclick={startNativeVirtualCamera} disabled={nativeVcamBusy || !virtualCamId}>
+            {nativeVcamBusy ? 'Starting…' : 'Start native camera'}
+          </button>
+        {/if}
+      </div>
+
+      <div class="virtual-status">
+        <span class="dot" class:live={nativeVcamActive}></span>
+        {#if nativeVcamActive}
+          Native virtual camera is live
+        {:else}
+          Native virtual camera is off
+        {/if}
+      </div>
+
+      {#if nativeVcamError}
+        <div class="virtual-error">{nativeVcamError}</div>
+      {/if}
+
+      <p class="hint">
+        Uses Windows Media Foundation to create a virtual camera without OBS.
+        Requires COM registration (automatic on first run).
+        Then pick <b>CamNet Virtual Camera</b> in your video conferencing app.
       </p>
     </div>
   </section>

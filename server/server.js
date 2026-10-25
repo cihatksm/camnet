@@ -8,6 +8,7 @@ import { DIST_DIR } from './paths.js';
 import { flushAll, getConfig, loadCameras } from './store.js';
 import { getLanIps } from './util.js';
 import { events } from './events.js';
+import { registerCom } from './vcam.js';
 
 /**
  * Starts the HTTP + HTTPS servers and returns a handle with the URLs and
@@ -20,6 +21,14 @@ export async function startServer() {
 
   if (!fs.existsSync(DIST_DIR)) {
     console.warn('\n[!] dist/ not found. Build the UI first: npm run build\n');
+  }
+
+  // Register native virtual camera COM component (requires admin)
+  try {
+    await registerCom();
+    console.log('[vcam] COM component registered');
+  } catch (err) {
+    console.warn('[vcam] COM registration skipped:', err.message);
   }
 
   const listen = (server, port) =>
