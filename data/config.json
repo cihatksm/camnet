@@ -1,0 +1,13 @@
+{
+  "httpPort": 3000,
+  "httpsPort": 3443,
+  "bind": "0.0.0.0",
+  "siteName": "CamNet",
+  "maxCameras": 100,
+  "maxViewersPerCamera": 12,
+  "iceServers": [],
+  "defaultWidth": 1280,
+  "defaultHeight": 720,
+  "defaultFps": 24,
+  "defaultQuality": 0.72
+}

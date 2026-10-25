@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' http://127.0.0.1:* http://localhost:* data:; connect-src http://127.0.0.1:* http://localhost:*; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <title>CamNet</title>
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --panel: #111823;
+        --line: #223044;
+        --text: #e8eef7;
+        --muted: #93a6bd;
+        --dim: #64788f;
+        --accent: #3ddc97;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: radial-gradient(900px 500px at 20% -10%, #13222f 0%, transparent 60%), var(--bg);
+        color: var(--text);
+        padding: 22px;
+        user-select: none;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .logo {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(150deg, rgba(61, 220, 151, 0.2), rgba(56, 189, 248, 0.1));
+        border: 1px solid rgba(61, 220, 151, 0.35);
+      }
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.5);
+        animation: pulse 2s ease-out infinite;
+      }
+      .dot.err {
+        background: #f87171;
+        animation: none;
+      }
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.5);
+        }
+        70% {
+          box-shadow: 0 0 0 7px rgba(61, 220, 151, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(61, 220, 151, 0);
+        }
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .row {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 9px 0;
+      }
+      .row label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      .url-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      code {
+        flex: 1;
+        font-family: Consolas, "Cascadia Code", monospace;
+        font-size: 12px;
+        color: #b9cbe0;
+        background: #070b11;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 6px 8px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      button {
+        font-family: inherit;
+        border: 1px solid var(--line);
+        background: #16202d;
+        color: var(--text);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      button:hover {
+        background: #1b2736;
+      }
+      .qr-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 14px 0 6px;
+      }
+      .qr-wrap img {
+        width: 168px;
+        height: 168px;
+        background: #fff;
+        border-radius: 10px;
+        padding: 6px;
+      }
+      .count {
+        text-align: center;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .error {
+        color: #fca5a5;
+        font-size: 12px;
+        text-align: center;
+        min-height: 16px;
+        margin-bottom: 8px;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 10px;
+      }
+      .actions .primary {
+        background: linear-gradient(180deg, #49e7a5, #2ecd8a);
+        border-color: #49e7a5;
+        color: #04140c;
+        font-weight: 650;
+      }
+      .hint {
+        font-size: 11px;
+        color: var(--dim);
+        text-align: center;
+        margin-top: 12px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <rect x="2.5" y="6" width="13" height="12" rx="3.4" fill="#3ddc97" />
+          <path d="M16.5 10.2 21.5 7v10l-5-3.2z" fill="#38bdf8" />
+          <circle cx="9" cy="12" r="2.6" fill="#0b1017" />
+        </svg>
+      </div>
+      <div>
+        <h1>CamNet</h1>
+        <div class="status">
+          <span id="status-dot" class="dot"></span>
+          <span id="status-text">Server running</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="row">
+        <label>This computer</label>
+        <div class="url-line"><code id="local">—</code><button data-for="local">Copy</button></div>
+      </div>
+      <div class="row">
+        <label>Devices on your LAN</label>
+        <div class="url-line"><code id="http">—</code><button data-for="http">Copy</button></div>
+      </div>
+      <div class="row">
+        <label>Camera sharing (HTTPS)</label>
+        <div class="url-line"><code id="https">—</code><button data-for="https">Copy</button></div>
+      </div>
+    </div>
+
+    <div class="qr-wrap"><img id="qr" alt="QR code" /></div>
+    <div class="count" id="count"></div>
+    <div class="error" id="error"></div>
+
+    <div class="actions">
+      <button class="primary" id="open">Open in browser</button>
+      <button id="quit">Quit</button>
+    </div>
+
+    <div class="hint">
+      Scan the QR code with a phone to share its camera.<br />
+      OBS: add a Browser Source with the LAN address + /c/&lt;camera-id&gt;.
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      function setError(message) {
+        $('status-dot').classList.add('err');
+        $('status-text').textContent = 'Server error';
+        $('error').textContent = message;
+      }
+
+      window.camnet.onStartError(setError);
+
+      document.querySelectorAll('button[data-for]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const url = $(btn.getAttribute('data-for')).textContent;
+          if (!url || url === '—') return;
+          navigator.clipboard.writeText(url).then(() => {
+            const original = btn.textContent;
+            btn.textContent = 'Copied';
+            setTimeout(() => (btn.textContent = original), 1200);
+          });
+        });
+      });
+
+      $('open').addEventListener('click', () => {
+        const url = $('local').textContent;
+        window.camnet.openBrowser(url && url !== '—' ? url : 'http://localhost:3000');
+      });
+
+      $('quit').addEventListener('click', () => window.camnet.quit());
+
+      (async () => {
+        const info = await window.camnet.getInfo();
+        if (!info) {
+          setError('The server could not be started.');
+          return;
+        }
+        $('local').textContent = info.localUrl;
+        $('http').textContent = info.httpUrl;
+        $('https').textContent = info.httpsUrl || 'disabled';
+        const target = info.httpsUrl || info.httpUrl;
+        $('qr').src = `${info.localUrl}/api/qr.svg?text=${encodeURIComponent(target)}`;
+
+        try {
+          const res = await fetch(`${info.localUrl}/api/cameras`);
+          const data = await res.json();
+          const online = data.cameras.filter((c) => c.online).length;
+          $('count').textContent = `${online} online · ${data.cameras.length} registered`;
+        } catch {
+          /* ignore */
+        }
+      })();
+    </script>
+  </body>
+</html>
