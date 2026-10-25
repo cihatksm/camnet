@@ -253,4 +253,4 @@ npm run dist:win   # build the portable Windows desktop app
 
 ## License
 
-[MIT](LICENSE) © Cihat Kösem
+[MIT](LICENSE) © cihatksm

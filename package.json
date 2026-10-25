@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "description": "Local network camera sharing and OBS streaming server",
-  "author": "Cihat Kösem",
+  "author": "cihatksm",
   "license": "MIT",
   "homepage": "https://github.com/cihatksm/camnet#readme",
   "repository": {
