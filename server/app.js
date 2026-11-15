@@ -15,7 +15,12 @@ import { dropRuntime, publicCamera, runtimeFor } from './state.js';
 import { attachMjpeg } from './mjpeg.js';
 import { getLanIps } from './util.js';
 import { startVirtualCamera as startObsVirtualCamera, stopVirtualCamera as stopObsVirtualCamera, virtualCameraStatus as obsVirtualCameraStatus } from './obs.js';
-import { startVirtualCamera as startNativeVirtualCamera, stopVirtualCamera as stopNativeVirtualCamera, vcamStatus as nativeVirtualCameraStatus } from './vcam.js';
+import {
+  registerCom as registerNativeVirtualCamera,
+  startVirtualCamera as startNativeVirtualCamera,
+  stopVirtualCamera as stopNativeVirtualCamera,
+  vcamStatus as nativeVirtualCameraStatus
+} from './vcam.js';
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
 const INDEX_FILE = path.join(DIST_DIR, 'index.html');
@@ -94,6 +99,15 @@ export function createApp() {
 
   app.get('/api/vcam/status', (_req, res) => {
     res.json(nativeVirtualCameraStatus());
+  });
+
+  app.post('/api/vcam/register', async (_req, res) => {
+    try {
+      const status = await registerNativeVirtualCamera();
+      res.json({ ok: true, ...status });
+    } catch (err) {
+      res.status(502).json({ error: 'vcam_register_failed', message: err.message });
+    }
   });
 
   app.post('/api/vcam/start', async (req, res) => {

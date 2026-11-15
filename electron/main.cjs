@@ -255,6 +255,18 @@ ipcMain.on('open-browser', (_event, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
 });
 
+ipcMain.on('open-device-manager', () => {
+  try {
+    execFile('mmc.exe', ['devmgmt.msc'], { windowsHide: false });
+  } catch (err) {
+    console.error('[device-manager] could not open:', err.message);
+  }
+});
+
+ipcMain.on('open-camera-settings', () => {
+  shell.openExternal('ms-settings:privacy-camera').catch(() => {});
+});
+
 ipcMain.on('set-theme', (_event, pref) => {
   if (pref !== 'system' && pref !== 'light' && pref !== 'dark') return;
   nativeTheme.themeSource = pref;

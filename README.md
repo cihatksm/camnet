@@ -17,6 +17,9 @@ CamNet runs a small local server. Any device on the same network opens the web a
 - **Preview off by default** on phones to save battery.
 - **Battery saver mode** and automatic low-battery suggestion to reduce phone drain.
 - **Portable desktop app** (single `.exe`) with a control panel, QR code, and a **Settings &amp; Permissions** panel for managing the firewall rule and registered cameras.
+- **Windows camera without OBS** — a system-wide Media Foundation virtual camera that appears in Windows Camera, Teams, Zoom, Discord and browsers.
+- **Light / dark theme** that follows the system, with a per-device toggle.
+- **Stable camera identity per device** — reopening the app resumes the same camera instead of creating duplicates.
 - **Live notifications** in the desktop app when a device connects or disconnects.
 - **Installable PWA** for phones ("Add to Home Screen").
 - **HTTPS certificate generated automatically** on first run.
@@ -30,6 +33,7 @@ CamNet runs a small local server. Any device on the same network opens the web a
 
 - **Node.js** `^20.19.0` or `>=22.12.0` (development and building only).
 - **Windows 10/11** to build the portable `.exe` (the web server itself is cross-platform).
+- **Windows 11** (build 22000+) for the built-in **Windows camera without OBS** (Media Foundation virtual camera).
 - A modern browser on the devices (Chrome, Edge, Safari, Firefox).
 
 ---
@@ -81,11 +85,10 @@ What it does:
 - **Requires administrator privileges.** The executable is marked to request elevation, so Windows shows a UAC prompt on launch. If it was somehow started normally, it relaunches itself elevated; if you decline the UAC prompt, it shows a clear error and exits. This is needed to open the firewall.
 - **Automatically allows TCP 3000 and 3443 on all network profiles** at startup (`Set-NetFirewallRule -Profile Any`, creating the rule if missing). This fixes the common case where Windows marks the LAN as “Public” and blocks inbound traffic.
 - Starts the HTTP + HTTPS server automatically.
-- Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, and **Open in browser** / **Quit**.
-- Stores cameras, settings and certificates in **`~/.camnet`** (portable: in the user's profile folder, not next to the executable).
 - Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, a **Cameras** tab for deleting cameras, a **Settings &amp; Permissions** tab for firewall rule management, and **Open in browser** / **Quit**.
+- **Windows Virtual Camera — no OBS**: registers and starts a system-wide camera. It appears in Windows Camera, Teams, Zoom, Discord, browsers and **Settings → Bluetooth &amp; devices → Cameras**; Device Manager lists virtual cameras under **Software devices**.
 - Stores cameras, settings and certificates in **`~/.camnet`** (portable: in the user's profile folder, not next to the executable).
-- Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, a **Cameras** tab for deleting cameras, a **Settings &amp; Permissions** tab for firewall rule management, and **Open in browser** / **Quit**.
+- Copies the virtual camera media source to `C:\ProgramData\CamNet\vcam` so the Windows Frame Server services can load it.
 
 **First launch notes:**
 
@@ -106,7 +109,32 @@ It opens full-screen without the browser address bar and loads faster thanks to 
 
 ---
 
-## OBS
+## Windows camera (no OBS)
+
+CamNet can register itself as a **system-wide Windows camera** using the Media Foundation virtual camera API. No OBS installation is required.
+
+1. Start sharing a camera from a phone (or create a camera on the computer).
+2. In the desktop app, open **Windows Virtual Camera — no OBS**.
+3. Pick the camera and press **Start**.
+
+Windows apps now list **CamNet Virtual Camera (Windows Virtual Camera)**:
+
+- Windows Camera
+- Microsoft Teams, Zoom, Discord and browsers
+- **Settings → Bluetooth &amp; devices → Cameras**
+
+> Device Manager shows user-mode virtual cameras under **Software devices**, not under the physical **Cameras** class. This is how Windows exposes Media Foundation virtual cameras; applications still see it as a normal camera. Use the **Device Manager** button in the desktop app to open it.
+
+Notes:
+
+- A **one-time administrator registration** is required (CamNet already runs elevated). If it fails, press **Register** in the desktop app.
+- The camera exists while CamNet is running and the virtual camera is started. Stopping it removes the device.
+- The camera source reads the MJPEG fallback from `http://127.0.0.1:<httpPort>/c/<camera-id>.mjpeg`, so it works even when the phone uses WebRTC for OBS.
+- Windows 11 build 22000+ is required for this feature.
+
+---
+
+## OBS (optional)
 
 ### Method 1 — Browser Source (recommended)
 
@@ -208,6 +236,13 @@ Use the HTTPS address (`https://<ip>:3443`) and accept the certificate warning.
 - Make sure both devices are on the same Wi-Fi / subnet.
 - Allow TCP 3000 and 3443 in Windows Firewall (run `allow-firewall.bat`).
 - Guest networks and AP/client isolation block device-to-device traffic.
+
+**CamNet Virtual Camera is not listed in an app**
+- Start it from the desktop app: **Windows Virtual Camera — no OBS** → select a camera → **Start**.
+- Check **Settings → Bluetooth &amp; devices → Cameras**. Device Manager shows virtual cameras under **Software devices**, not under **Cameras**.
+- The camera is registered once with administrator rights. If registration failed, press **Register** (or run CamNet as administrator).
+- The phone must be sharing a camera; until then the virtual camera shows a waiting screen.
+- Windows 11 build 22000+ is required for the Media Foundation virtual camera API.
 
 **Black screen in OBS**
 - First check `http://<ip>:3000/c/<id>` in a browser.

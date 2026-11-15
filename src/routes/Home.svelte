@@ -24,6 +24,8 @@
   let nativeVcamActive = $state(false);
   let nativeVcamBusy = $state(false);
   let nativeVcamError = $state('');
+  let nativeVcamRegistered = $state(false);
+  let nativeVcamDevice = $state(false);
 
   const httpsHome = $derived(
     info?.httpsPort ? `https://${info.primaryIp}:${info.httpsPort}/` : ''
@@ -92,7 +94,9 @@
       reconcileOwner();
       if (!virtualCamId) {
         const firstOnline = cameras.find((camera) => camera.online);
-        if (firstOnline) virtualCamId = firstOnline.id;
+        const preferred =
+          firstOnline ?? cameras.find((camera) => camera.id === ownedId) ?? cameras[0];
+        if (preferred) virtualCamId = preferred.id;
       }
     } catch (err) {
       if (!loading) console.warn('failed to load camera list', err);
@@ -116,8 +120,25 @@
     try {
       const data = await api('/api/vcam/status');
       nativeVcamActive = Boolean(data.running);
+      nativeVcamRegistered = Boolean(data.registered);
+      nativeVcamDevice = Boolean(data.devicePresent);
+      if (!nativeVcamBusy) nativeVcamError = data.error || '';
     } catch {
       nativeVcamActive = false;
+    }
+  }
+
+  async function registerNativeVcam() {
+    if (nativeVcamBusy) return;
+    nativeVcamBusy = true;
+    nativeVcamError = '';
+    try {
+      await api('/api/vcam/register', { method: 'POST', body: '{}' });
+      await refreshNativeVcam();
+    } catch (err) {
+      nativeVcamError = err.message || 'Could not register the Windows camera.';
+    } finally {
+      nativeVcamBusy = false;
     }
   }
 
@@ -402,8 +423,8 @@
 
   <section class="section">
     <div class="section-head">
-      <h2>Windows Virtual Camera</h2>
-      <span class="muted">Use CamNet as a webcam in Zoom, Teams, Discord…</span>
+      <h2>OBS Virtual Camera</h2>
+      <span class="muted">Use OBS as a webcam in Zoom, Teams, Discord…</span>
     </div>
     <div class="card card-pad virtual-card">
       <div class="virtual-row">
@@ -445,15 +466,15 @@
       <p class="hint">
         Starts OBS's Virtual Camera and adds a Browser Source for the selected camera.
         Then pick <b>OBS Virtual Camera</b> in Zoom, Teams, Discord or the Windows Camera app.
-        Prefer no OBS? Open the <a href={virtualCamId ? `/c/${virtualCamId}` : '/'} target="_blank" rel="noreferrer">direct camera page</a> instead.
+        Prefer no OBS? Use <b>Windows Camera (no OBS)</b> below.
       </p>
     </div>
   </section>
 
   <section class="section">
     <div class="section-head">
-      <h2>Native Virtual Camera (Experimental)</h2>
-      <span class="muted">OBS-free virtual camera using Windows Media Foundation</span>
+      <h2>Windows Camera (no OBS)</h2>
+      <span class="muted">System-wide virtual camera using Windows Media Foundation</span>
     </div>
     <div class="card card-pad virtual-card">
       <div class="virtual-row">
@@ -468,13 +489,18 @@
             {/each}
           </select>
         </div>
+        {#if !nativeVcamRegistered}
+          <button class="btn" onclick={registerNativeVcam} disabled={nativeVcamBusy}>
+            {nativeVcamBusy ? 'Registering…' : 'Register with Windows'}
+          </button>
+        {/if}
         {#if nativeVcamActive}
           <button class="btn btn-danger" onclick={stopNativeVirtualCamera} disabled={nativeVcamBusy}>
-            {nativeVcamBusy ? 'Stopping…' : 'Stop native camera'}
+            {nativeVcamBusy ? 'Stopping…' : 'Stop Windows camera'}
           </button>
         {:else}
           <button class="btn btn-primary" onclick={startNativeVirtualCamera} disabled={nativeVcamBusy || !virtualCamId}>
-            {nativeVcamBusy ? 'Starting…' : 'Start native camera'}
+            {nativeVcamBusy ? 'Starting…' : 'Start Windows camera'}
           </button>
         {/if}
       </div>
@@ -482,9 +508,13 @@
       <div class="virtual-status">
         <span class="dot" class:live={nativeVcamActive}></span>
         {#if nativeVcamActive}
-          Native virtual camera is live
+          {nativeVcamDevice
+            ? 'CamNet Virtual Camera is live in Windows'
+            : 'Driver is running — waiting for Windows to list the camera…'}
+        {:else if !nativeVcamRegistered}
+          Not registered with Windows yet.
         {:else}
-          Native virtual camera is off
+          Ready — select a camera and press Start.
         {/if}
       </div>
 
@@ -493,9 +523,10 @@
       {/if}
 
       <p class="hint">
-        Uses Windows Media Foundation to create a virtual camera without OBS.
-        Requires COM registration (automatic on first run).
-        Then pick <b>CamNet Virtual Camera</b> in your video conferencing app.
+        Use CamNet as a webcam without OBS. Windows apps see <b>CamNet Virtual Camera</b>.
+        Find it in <b>Settings → Bluetooth &amp; devices → Cameras</b>; Device Manager lists
+        virtual cameras under <b>Software devices</b>. Registration needs administrator rights
+        (CamNet already runs elevated).
       </p>
     </div>
   </section>

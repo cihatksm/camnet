@@ -8,7 +8,7 @@ import { DIST_DIR } from './paths.js';
 import { flushAll, getConfig, loadCameras } from './store.js';
 import { getLanIps } from './util.js';
 import { events } from './events.js';
-import { registerCom } from './vcam.js';
+import { registerCom, stopVirtualCamera } from './vcam.js';
 
 /**
  * Starts the HTTP + HTTPS servers and returns a handle with the URLs and
@@ -89,6 +89,7 @@ export async function startServer() {
     },
     async close() {
       await Promise.all([closeServer(httpServer), closeServer(httpsServer)]);
+      await stopVirtualCamera();
       flushAll();
     }
   };

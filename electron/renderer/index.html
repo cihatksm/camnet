@@ -327,6 +327,21 @@
         margin-top: 6px;
         font-size: 11.5px;
         color: var(--danger);
+        white-space: pre-wrap;
+      }
+      .vcam-links {
+        display: flex;
+        gap: 6px;
+        margin-top: 9px;
+        flex-wrap: wrap;
+      }
+      .vcam-links button {
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+      .hint.left {
+        text-align: left;
+        margin-top: 9px;
       }
       .count {
         text-align: center;
@@ -524,7 +539,26 @@
       <!-- Dashboard -->
       <section class="panel active" id="panel-dashboard">
         <div class="card">
-          <div class="row"><label>Windows Virtual Camera</label></div>
+          <div class="row"><label>Windows Virtual Camera — no OBS</label></div>
+          <div class="vcam-row">
+            <select id="native-select" class="vcam-select"></select>
+            <button id="native-register">Register</button>
+            <button class="primary" id="native-toggle" disabled>Start</button>
+          </div>
+          <div id="native-status" class="vcam-status">Checking Windows camera…</div>
+          <div id="native-error" class="vcam-error"></div>
+          <div class="vcam-links">
+            <button id="open-device-manager">Device Manager</button>
+            <button id="open-camera-settings">Camera settings</button>
+          </div>
+          <div class="hint left">
+            Windows apps see <b>CamNet Virtual Camera</b>. Device Manager lists virtual cameras
+            under <b>Software devices</b>; Settings → Bluetooth &amp; devices → Cameras also shows it.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row"><label>OBS Virtual Camera</label></div>
           <div class="vcam-row">
             <select id="vcam-select" class="vcam-select"></select>
             <button class="primary" id="vcam-toggle" disabled>Start</button>
@@ -631,6 +665,9 @@
       let apiBase = '';
       let vcamActive = false;
       let vcamBusy = false;
+      let nativeActive = false;
+      let nativeBusy = false;
+      let nativeRegistered = false;
 
       const THEME_KEY = 'camnet-theme';
       const THEMES = ['system', 'light', 'dark'];
@@ -693,28 +730,35 @@
         $('error').textContent = message;
       }
 
+      function fillCameraSelect(select, cameras) {
+        const current = select.value;
+        select.innerHTML = '';
+        if (!cameras || cameras.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'No cameras yet';
+          select.appendChild(opt);
+          return;
+        }
+        cameras.forEach((camera) => {
+          const opt = document.createElement('option');
+          opt.value = camera.id;
+          opt.textContent =
+            (camera.name || 'Camera') + ' · /c/' + camera.id + (camera.online ? '' : ' (offline)');
+          select.appendChild(opt);
+        });
+        if (current && cameras.some((camera) => camera.id === current)) {
+          select.value = current;
+        } else if (cameras[0]) {
+          select.value = cameras[0].id;
+        }
+      }
+
       async function loadVcamCameras() {
         try {
           const cameras = await window.camnet.getCameras();
-          const select = $('vcam-select');
-          const current = select.value;
-          select.innerHTML = '';
-          if (!cameras || cameras.length === 0) {
-            const opt = document.createElement('option');
-            opt.value = '';
-            opt.textContent = 'No cameras yet';
-            select.appendChild(opt);
-            return;
-          }
-          cameras.forEach((camera) => {
-            const opt = document.createElement('option');
-            opt.value = camera.id;
-            opt.textContent =
-              (camera.name || 'Camera') + ' · /c/' + camera.id + (camera.online ? '' : ' (offline)');
-            select.appendChild(opt);
-          });
-          if (current) select.value = current;
-          else if (cameras[0]) select.value = cameras[0].id;
+          fillCameraSelect($('vcam-select'), cameras);
+          fillCameraSelect($('native-select'), cameras);
         } catch {
           /* ignore */
         }
@@ -770,6 +814,91 @@
 
       $('vcam-toggle').addEventListener('click', toggleVcam);
       $('vcam-select').addEventListener('change', refreshObs);
+
+      async function refreshNative() {
+        if (!apiBase) return;
+        try {
+          const res = await fetch(apiBase + '/api/vcam/status');
+          const data = await res.json();
+          nativeActive = Boolean(data.running);
+          nativeRegistered = Boolean(data.registered);
+          const status = $('native-status');
+          if (data.running) {
+            status.textContent = data.devicePresent
+              ? 'CamNet Virtual Camera is live in Windows'
+              : 'Driver running — waiting for Windows to list the camera…';
+          } else if (!data.registered) {
+            status.textContent = 'Not registered with Windows yet';
+          } else {
+            status.textContent = 'Ready — pick a camera and press Start';
+          }
+          status.classList.toggle('online', Boolean(data.registered));
+          status.classList.toggle('live', Boolean(data.running));
+          $('native-toggle').textContent = data.running ? 'Stop' : 'Start';
+          $('native-toggle').disabled =
+            nativeBusy || (!data.running && !$('native-select').value);
+          $('native-register').style.display = data.registered ? 'none' : '';
+          if (data.error) $('native-error').textContent = data.error;
+          else if (!nativeBusy) $('native-error').textContent = '';
+        } catch {
+          nativeActive = false;
+        }
+      }
+
+      async function toggleNative() {
+        if (nativeBusy || !apiBase) return;
+        const id = $('native-select').value;
+        nativeBusy = true;
+        $('native-error').textContent = '';
+        $('native-toggle').disabled = true;
+        try {
+          const endpoint = nativeActive ? '/api/vcam/stop' : '/api/vcam/start';
+          const res = await fetch(apiBase + endpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(nativeActive ? {} : { cameraId: id })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.message || 'Windows camera error');
+          toast(nativeActive ? 'Windows camera stopped' : 'Windows camera started');
+        } catch (err) {
+          $('native-error').textContent =
+            err.message || 'Could not start the Windows camera.';
+        } finally {
+          nativeBusy = false;
+          await refreshNative();
+        }
+      }
+
+      async function registerNative() {
+        if (nativeBusy || !apiBase) return;
+        nativeBusy = true;
+        $('native-error').textContent = '';
+        $('native-register').disabled = true;
+        try {
+          const res = await fetch(apiBase + '/api/vcam/register', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{}'
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.message || 'Registration failed.');
+          toast('Windows camera registered');
+        } catch (err) {
+          $('native-error').textContent =
+            err.message || 'Could not register the Windows camera.';
+        } finally {
+          nativeBusy = false;
+          $('native-register').disabled = false;
+          await refreshNative();
+        }
+      }
+
+      $('native-toggle').addEventListener('click', toggleNative);
+      $('native-register').addEventListener('click', registerNative);
+      $('native-select').addEventListener('change', refreshNative);
+      $('open-device-manager').addEventListener('click', () => window.camnet.openDeviceManager());
+      $('open-camera-settings').addEventListener('click', () => window.camnet.openCameraSettings());
 
       function toast(message) {
         const wrap = $('toasts');
@@ -941,9 +1070,11 @@
 
         await loadVcamCameras();
         await refreshObs();
+        await refreshNative();
         setInterval(() => {
           loadVcamCameras();
           refreshObs();
+          refreshNative();
         }, 5000);
 
         try {
