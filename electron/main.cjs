@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog, nativeTheme } = require('electron');
 const { execFile, execFileSync } = require('node:child_process');
 const path = require('node:path');
 const os = require('node:os');
@@ -158,6 +158,10 @@ function removeFirewallRule() {
   });
 }
 
+function windowBackground() {
+  return nativeTheme.shouldUseDarkColors ? '#0b1017' : '#ffffff';
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 580,
@@ -168,7 +172,7 @@ function createWindow() {
     maximizable: false,
     fullscreenable: false,
     title: 'CamNet',
-    backgroundColor: '#0b0f14',
+    backgroundColor: windowBackground(),
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -249,6 +253,16 @@ function createWindow() {
 
 ipcMain.on('open-browser', (_event, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
+});
+
+ipcMain.on('set-theme', (_event, pref) => {
+  if (pref !== 'system' && pref !== 'light' && pref !== 'dark') return;
+  nativeTheme.themeSource = pref;
+  if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
+});
+
+nativeTheme.on('updated', () => {
+  if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
 });
 
 ipcMain.on('quit', () => app.quit());

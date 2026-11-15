@@ -1,10 +1,12 @@
 <script>
   import { parseRoute, route, installRouter } from './lib/router.svelte.js';
+  import { initTheme } from './lib/theme.svelte.js';
   import Home from './routes/Home.svelte';
   import Share from './routes/Share.svelte';
   import Watch from './routes/Watch.svelte';
 
   $effect(() => installRouter());
+  $effect(() => initTheme());
 
   const parsed = $derived(parseRoute(route.path));
 </script>

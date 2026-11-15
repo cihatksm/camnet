@@ -1,8 +1,10 @@
 <script>
   import { onMount } from 'svelte';
-  import { api, getToken, removeToken, setToken, snapshotUrl } from '../lib/api.js';
+  import { api, getToken, setToken, snapshotUrl } from '../lib/api.js';
   import { copyText, deviceLabel, formatRelative, isSecureEnough, resolutionLabel } from '../lib/util.js';
   import { navigate } from '../lib/router.svelte.js';
+  import { forgetOwnedCamera, getOwnedCamera, rememberOwnedCamera } from '../lib/identity.js';
+  import ThemeToggle from '../lib/ThemeToggle.svelte';
 
   let cameras = $state([]);
   let info = $state(null);
@@ -12,6 +14,7 @@
   let copiedId = $state('');
   let showPair = $state(false);
   let failedThumbs = $state({});
+  let ownedId = $state('');
 
   let virtualCamId = $state('');
   let obsConnected = $state(false);
@@ -29,6 +32,7 @@
   const qrSrc = $derived(`/api/qr.svg?text=${encodeURIComponent(pairUrl)}`);
   const cameraCount = $derived(cameras.length);
   const onlineCount = $derived(cameras.filter((c) => c.online).length);
+  const ownedCamera = $derived(cameras.find((camera) => camera.id === ownedId) ?? null);
 
   function httpBase() {
     const ip =
@@ -56,11 +60,36 @@
     failedThumbs = { ...failedThumbs, [key]: true };
   }
 
+  /**
+   * Keep the "this device" camera in sync with the server list.
+   * Existing installs only have per-camera tokens, so the newest token we
+   * still hold is adopted as this device's camera on the first run.
+   */
+  function reconcileOwner() {
+    const owner = getOwnedCamera();
+    if (owner && cameras.some((camera) => camera.id === owner.id)) {
+      ownedId = owner.id;
+      return;
+    }
+    if (owner) forgetOwnedCamera(owner.id);
+
+    const newest = cameras
+      .filter((camera) => getToken(camera.id))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+    if (newest) {
+      rememberOwnedCamera({ id: newest.id, token: getToken(newest.id), name: newest.name });
+      ownedId = newest.id;
+    } else {
+      ownedId = '';
+    }
+  }
+
   async function refresh() {
     try {
       const data = await api('/api/cameras');
       cameras = data.cameras ?? [];
       error = '';
+      reconcileOwner();
       if (!virtualCamId) {
         const firstOnline = cameras.find((camera) => camera.online);
         if (firstOnline) virtualCamId = firstOnline.id;
@@ -196,9 +225,20 @@
     };
   });
 
-  async function createCamera() {
+  async function createCamera(force = false) {
     if (busy) return;
     error = '';
+
+    // Reuse the camera this device already owns instead of minting a new ID
+    // on every visit. "New camera" passes force = true for a second camera.
+    if (!force) {
+      const owner = getOwnedCamera();
+      if (owner && cameras.some((camera) => camera.id === owner.id)) {
+        navigate(`/share/${owner.id}?start=1`);
+        return;
+      }
+    }
+
     if (!isSecureEnough()) {
       error = 'Camera sharing requires the HTTPS address.';
       return;
@@ -211,6 +251,11 @@
         body: JSON.stringify({ name: deviceLabel() })
       });
       setToken(data.camera.id, data.token);
+      rememberOwnedCamera({
+        id: data.camera.id,
+        token: data.token,
+        name: data.camera?.name ?? ''
+      });
       navigate(`/share/${data.camera.id}?start=1`);
     } catch (err) {
       error = err.message || 'Could not create the camera.';
@@ -228,7 +273,7 @@
         method: 'DELETE',
         headers: { 'x-camera-token': token }
       });
-      removeToken(camera.id);
+      forgetOwnedCamera(camera.id);
       await refresh();
     } catch (err) {
       error = err.message;
@@ -251,9 +296,9 @@
     <a class="brand" href="/" data-link>
       <span class="brand-mark">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="2.5" y="6" width="13" height="12" rx="3.4" fill="#3ddc97" />
-          <path d="M16.5 10.2 21.5 7v10l-5-3.2z" fill="#38bdf8" />
-          <circle cx="9" cy="12" r="2.6" fill="#1f2328" />
+          <rect x="2.5" y="6" width="13" height="12" rx="3.4" fill="var(--accent)" />
+          <path d="M16.5 10.2 21.5 7v10l-5-3.2z" fill="var(--accent-2)" />
+          <circle cx="9" cy="12" r="2.6" fill="var(--logo-lens)" />
         </svg>
       </span>
       <span>CamNet<small>local camera network</small></span>
@@ -262,20 +307,21 @@
     {#if info}
       <span class="net-pill mono">{info.primaryIp}:{info.httpPort}</span>
     {/if}
-    <button class="btn" onclick={() => (showPair = true)}>
+    <ThemeToggle />
+    <button class="btn" onclick={() => (showPair = true)} title="Connect phone" aria-label="Connect phone">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <rect x="3" y="3" width="7" height="7" rx="1.5" />
         <rect x="14" y="3" width="7" height="7" rx="1.5" />
         <rect x="3" y="14" width="7" height="7" rx="1.5" />
         <path d="M14 14h3v3h-3zM20 14v2M14 20h2M20 20h1" />
       </svg>
-      Connect phone
+      <span class="btn-label">Connect phone</span>
     </button>
-    <button class="btn btn-primary" onclick={createCamera}>
+    <button class="btn btn-primary" onclick={() => createCamera()}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
         <path d="M12 5v14M5 12h14" />
       </svg>
-      Share camera
+      {ownedCamera ? 'Continue sharing' : 'Share camera'}
     </button>
   </div>
 </header>
@@ -296,7 +342,9 @@
         Each device gets a fixed path, and you add each one as a separate Browser Source in OBS.
       </p>
       <div class="hero-actions">
-        <button class="btn btn-primary" onclick={createCamera}>Share camera</button>
+        <button class="btn btn-primary" onclick={() => createCamera()}>
+          {ownedCamera ? 'Continue sharing' : 'Share camera'}
+        </button>
         {#if httpsHome && !isSecureEnough()}
           <a class="btn" href={httpsHome}>Secure connection (HTTPS)</a>
         {/if}
@@ -455,7 +503,14 @@
   <section class="section">
     <div class="section-head">
       <h2>Cameras</h2>
-      <span class="muted">{onlineCount} online · {cameraCount} registered</span>
+      <div class="section-head-meta">
+        <span class="muted">{onlineCount} online · {cameraCount} registered</span>
+        {#if ownedCamera}
+          <button class="btn btn-sm" onclick={() => createCamera(true)} title="Create an additional camera">
+            + New camera
+          </button>
+        {/if}
+      </div>
     </div>
 
     {#if loading}
@@ -475,7 +530,7 @@
           As soon as you start streaming, the OBS link is ready.
         </p>
         <div class="empty-actions">
-          <button class="btn btn-primary" onclick={createCamera}>Create camera</button>
+          <button class="btn btn-primary" onclick={() => createCamera()}>Create camera</button>
           <button class="btn" onclick={() => (showPair = true)}>Connect phone</button>
         </div>
       </div>
@@ -506,6 +561,9 @@
                   <span class="badge badge-live"><span class="dot dot-pulse"></span>Live</span>
                 {:else}
                   <span class="badge badge-off">Offline</span>
+                {/if}
+                {#if camera.id === ownedId}
+                  <span class="badge badge-info">This device</span>
                 {/if}
                 {#if camera.online && camera.viewers > 0}
                   <span class="badge badge-info">{camera.viewers} viewers</span>
@@ -717,7 +775,7 @@
     border-radius: 8px;
     background: var(--bg-soft);
     border: 1px solid var(--line-soft);
-    color: #116329;
+    color: var(--ok-text-strong);
     font-size: 11.5px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -742,6 +800,14 @@
 
   .section-head span {
     font-size: 13px;
+  }
+
+  .section-head-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .loading {
@@ -799,7 +865,7 @@
   }
 
   .cam-card:hover {
-    border-color: #c8d1da;
+    border-color: var(--hover-line);
     transform: translateY(-1px);
   }
 
@@ -807,7 +873,7 @@
     position: relative;
     aspect-ratio: 16 / 9;
     background:
-      radial-gradient(120% 90% at 50% 0%, #f6f8fa 0%, #eaeef2 70%);
+      var(--thumb-bg);
     border-bottom: 1px solid var(--line-soft);
     overflow: hidden;
   }
@@ -846,7 +912,7 @@
     bottom: 9px;
     padding: 4px 8px;
     border-radius: 7px;
-    background: rgba(246, 248, 250, 0.88);
+    background: var(--thumb-meta-bg);
     backdrop-filter: blur(6px);
     color: var(--muted);
     font-size: 11px;
@@ -894,7 +960,7 @@
   }
 
   .live-text {
-    color: #1a7f4e;
+    color: var(--ok-text);
   }
 
   .cam-actions {
@@ -907,7 +973,7 @@
   }
 
   .ok {
-    color: #1a7f4e;
+    color: var(--ok-text);
   }
 
   .alert-icon {
@@ -920,14 +986,14 @@
     font-size: 12px;
     font-weight: 800;
     color: var(--warn);
-    border: 1px solid rgba(154, 103, 0, 0.4);
-    background: rgba(154, 103, 0, 0.1);
+    border: 1px solid var(--warn-line);
+    background: var(--warn-bg);
   }
 
   .alert-danger .alert-icon {
     color: var(--danger);
-    border-color: rgba(207, 34, 46, 0.5);
-    background: rgba(207, 34, 46, 0.12);
+    border-color: var(--danger-line-strong);
+    background: var(--danger-bg-strong);
   }
 
   .alert {
@@ -954,8 +1020,8 @@
     border-radius: 7px;
     font-size: 11.5px;
     font-weight: 700;
-    color: #0a3620;
-    background: linear-gradient(180deg, #3ddc97, #2fb97c);
+    color: var(--accent-ink);
+    background: var(--step-bg);
     margin-bottom: 10px;
   }
 
@@ -988,7 +1054,7 @@
     display: grid;
     place-items: center;
     padding: 20px;
-    background: rgba(31, 35, 40, 0.4);
+    background: var(--overlay);
     backdrop-filter: blur(6px);
   }
 
@@ -1112,6 +1178,9 @@
     .topbar-inner .btn {
       padding: 0 11px;
       font-size: 13px;
+    }
+    .topbar-inner .btn-label {
+      display: none;
     }
     .hero {
       padding-top: 26px;

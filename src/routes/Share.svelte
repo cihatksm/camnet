@@ -3,6 +3,8 @@
   import { api, getToken } from '../lib/api.js';
   import { Broadcaster } from '../lib/broadcaster.js';
   import { copyText, formatBitrate, isSecureEnough } from '../lib/util.js';
+  import { getOwnedCamera, rememberOwnedCamera } from '../lib/identity.js';
+  import ThemeToggle from '../lib/ThemeToggle.svelte';
 
   let { id } = $props();
 
@@ -114,6 +116,9 @@
   });
 
   onMount(() => {
+    // A cookie can survive when localStorage was cleared or the app was
+    // opened on another port, so hydrate the token map before reading it.
+    getOwnedCamera();
     token = getToken(id) ?? '';
 
     (async () => {
@@ -143,6 +148,8 @@
       }
 
       loading = false;
+
+      rememberOwnedCamera({ id, token, name: camera?.name ?? '' });
 
       const wantsStart = new URLSearchParams(location.search).get('start') === '1';
       if (wantsStart && canShare && isSecureEnough()) {
@@ -419,6 +426,7 @@
         body: JSON.stringify({ name })
       });
       camera = data.camera;
+      rememberOwnedCamera({ id, token, name: camera?.name ?? '' });
     } catch (err) {
       error = err.message;
     }
@@ -492,9 +500,9 @@
     <a class="brand" href="/" data-link>
       <span class="brand-mark">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="2.5" y="6" width="13" height="12" rx="3.4" fill="#3ddc97" />
-          <path d="M16.5 10.2 21.5 7v10l-5-3.2z" fill="#38bdf8" />
-          <circle cx="9" cy="12" r="2.6" fill="#1f2328" />
+          <rect x="2.5" y="6" width="13" height="12" rx="3.4" fill="var(--accent)" />
+          <path d="M16.5 10.2 21.5 7v10l-5-3.2z" fill="var(--accent-2)" />
+          <circle cx="9" cy="12" r="2.6" fill="var(--logo-lens)" />
         </svg>
       </span>
       <span>CamNet<small>camera sharing</small></span>
@@ -512,6 +520,7 @@
       <span class="dot" class:dot-pulse={live && connState === 'online'}></span>
       {live ? connLabel : 'Off'}
     </span>
+    <ThemeToggle />
     <a class="btn btn-sm btn-ghost" href="/" data-link>Home</a>
   </div>
 </header>
@@ -863,7 +872,7 @@
   }
 
   .cam-name:hover {
-    border-color: #c8d1da;
+    border-color: var(--hover-line);
   }
 
   .share-layout {
@@ -1051,8 +1060,8 @@
     width: 34px;
     height: 20px;
     border-radius: 999px;
-    background: #d0d7de;
-    border: 1px solid #c8d1da;
+    background: var(--switch-off);
+    border: 1px solid var(--switch-off-line);
     position: relative;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
@@ -1067,13 +1076,13 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #8b949e;
+    background: var(--switch-knob);
     transition: transform 0.15s, background 0.15s;
   }
 
   .switch input:checked {
-    background: rgba(61, 220, 151, 0.3);
-    border-color: rgba(61, 220, 151, 0.6);
+    background: var(--switch-on);
+    border-color: var(--switch-on-line);
   }
 
   .switch input:checked::after {
@@ -1114,8 +1123,8 @@
     margin-top: 14px;
     padding: 10px 12px;
     border-radius: 6px;
-    border: 1px solid rgba(154, 103, 0, 0.35);
-    background: rgba(154, 103, 0, 0.08);
+    border: 1px solid var(--warn-line);
+    background: var(--warn-bg-soft);
     font-size: 12.5px;
     color: var(--warn);
   }
@@ -1180,7 +1189,7 @@
   }
 
   .stat-row b.ok {
-    color: #1a7f4e;
+    color: var(--ok-text);
   }
 
   .stat-row b.bad {
@@ -1188,7 +1197,7 @@
   }
 
   .copy-path {
-    color: #116329 !important;
+    color: var(--ok-text-strong) !important;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1220,8 +1229,8 @@
     font-size: 12px;
     font-weight: 800;
     color: var(--danger);
-    border: 1px solid rgba(207, 34, 46, 0.5);
-    background: rgba(207, 34, 46, 0.12);
+    border: 1px solid var(--danger-line-strong);
+    background: var(--danger-bg-strong);
   }
 
   @media (max-width: 1020px) {
@@ -1238,8 +1247,11 @@
     .control-grid {
       grid-template-columns: 1fr;
     }
+    .brand > span:not(.brand-mark) {
+      display: none;
+    }
     .cam-name {
-      max-width: 130px;
+      max-width: 90px;
     }
     .topbar-inner {
       gap: 8px;

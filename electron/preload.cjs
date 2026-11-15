@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('camnet', {
   removeFirewallRule: () => ipcRenderer.invoke('remove-firewall-rule'),
   addFirewallRule: () => ipcRenderer.invoke('add-firewall-rule'),
   getDataDir: () => ipcRenderer.invoke('get-data-dir'),
+  setTheme: (theme) => ipcRenderer.send('set-theme', theme),
   onPublisherOnline: (cb) => ipcRenderer.on('publisher-online', (_e, info) => cb(info)),
   onPublisherOffline: (cb) => ipcRenderer.on('publisher-offline', (_e, info) => cb(info))
 });
