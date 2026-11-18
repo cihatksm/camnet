@@ -228,6 +228,25 @@ function createWindow() {
     return listCameras().map((c) => publicCamera(c));
   });
 
+  ipcMain.handle('update-camera-settings', async (_event, cameraId, settings) => {
+    if (!server) return null;
+    const id = String(cameraId ?? '').trim();
+    if (!id || !settings || typeof settings !== 'object') return null;
+
+    const [{ updateCamera }, { publicCamera }, { events: serverEvents }] = await Promise.all([
+      import(pathToFileURL(path.join(__dirname, '..', 'server', 'store.js')).href),
+      import(pathToFileURL(path.join(__dirname, '..', 'server', 'state.js')).href),
+      import(pathToFileURL(path.join(__dirname, '..', 'server', 'events.js')).href)
+    ]);
+
+    const camera = updateCamera(id, { settings });
+    if (!camera) return null;
+
+    // Apply live to a phone that is already streaming.
+    serverEvents.emit('camera-settings', { cameraId: id, settings: camera.settings });
+    return publicCamera(camera);
+  });
+
   ipcMain.handle('delete-camera', async (_event, cameraId) => {
     if (!server) return false;
     const { deleteCamera } = await import(pathToFileURL(path.join(__dirname, '..', 'server', 'store.js')).href);

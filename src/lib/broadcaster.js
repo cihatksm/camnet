@@ -159,6 +159,9 @@ export class Broadcaster {
         this.iceServers = Array.isArray(msg.iceServers) ? msg.iceServers : [];
         this.emit('hello', { camera: msg.camera, viewerCount: msg.viewerCount ?? 0 });
         break;
+      case 'settings':
+        this.emit('settings', msg.settings);
+        break;
       case 'viewer-join':
         this.emit('viewers', { delta: 1 });
         if (msg.mode === 'webrtc') this.ensurePeer(msg.peerId);

@@ -198,14 +198,21 @@
     };
   });
 
-  function constraints() {
-    const video = {
-      width: { ideal: settings.width },
-      height: { ideal: settings.height },
-      frameRate: { ideal: settings.fps, max: 60 }
-    };
-    if (selectedDevice) video.deviceId = { exact: selectedDevice };
-    else if (settings.facing) video.facingMode = { ideal: settings.facing };
+  function constraints(relaxed = false) {
+    let video;
+    if (relaxed) {
+      video = selectedDevice
+        ? { deviceId: { exact: selectedDevice } }
+        : (settings.facing ? { facingMode: { ideal: settings.facing } } : {});
+    } else {
+      video = {
+        width: { ideal: settings.width },
+        height: { ideal: settings.height },
+        frameRate: { ideal: settings.fps, max: 60 }
+      };
+      if (selectedDevice) video.deviceId = { exact: selectedDevice };
+      else if (settings.facing) video.facingMode = { ideal: settings.facing };
+    }
 
     const audio = settings.audio
       ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
@@ -214,15 +221,28 @@
     return { video, audio };
   }
 
-  async function getMedia() {
+  async function getMedia({ allowDefaultFallback = false } = {}) {
     try {
       return await navigator.mediaDevices.getUserMedia(constraints());
     } catch (err) {
-      if (err?.name === 'OverconstrainedError' && selectedDevice) {
-        selectedDevice = '';
-        return await navigator.mediaDevices.getUserMedia(constraints());
+      const retryable =
+        err?.name === 'OverconstrainedError' ||
+        err?.name === 'NotFoundError' ||
+        err?.name === 'DevicesNotFoundError';
+      if (!retryable) throw err;
+
+      // Retry the same camera without resolution/fps constraints. This must
+      // not silently fall back to the front camera: the user explicitly
+      // asked for the other camera.
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints(true));
+      } catch (retryErr) {
+        if (allowDefaultFallback && selectedDevice) {
+          selectedDevice = '';
+          return navigator.mediaDevices.getUserMedia(constraints(true));
+        }
+        throw retryErr;
       }
-      throw err;
     }
   }
 
@@ -235,7 +255,7 @@
       if (!canShare) {
         throw Object.assign(new Error('insecure'), { name: 'SecurityError' });
       }
-      const media = await getMedia();
+      const media = await getMedia({ allowDefaultFallback: true });
       stream = media;
       live = true;
       connState = 'connecting';
@@ -285,25 +305,90 @@
     releaseWakeLock();
   }
 
-  async function changeMedia() {
+  async function changeMedia(target = selectedDevice, { persist = true } = {}) {
+    const next = typeof target === 'string' ? target : selectedDevice;
+    const previousDevice =
+      stream?.getVideoTracks?.()[0]?.getSettings?.().deviceId || selectedDevice || '';
+
+    selectedDevice = next;
+
     if (!live || changing) {
-      saveSettings();
+      if (persist) saveSettings();
       return;
     }
+
     changing = true;
     error = '';
+
+    // Android only allows one camera to be opened at a time. Release the
+    // current video track before opening the requested camera.
+    for (const track of stream?.getVideoTracks?.() ?? []) track.stop();
+
     try {
       const media = await getMedia();
       stream = media;
       broadcaster?.setStream(media);
+
+      const actual = media.getVideoTracks()[0]?.getSettings?.().deviceId;
+      if (actual) selectedDevice = actual;
+
       settings.audio = media.getAudioTracks().length > 0;
       await loadDevices();
-      saveSettings();
+      if (persist) saveSettings();
     } catch (err) {
+      // Restore the previous camera so the broadcast does not stay dead.
+      selectedDevice = previousDevice;
+      try {
+        const media = await getMedia();
+        stream = media;
+        broadcaster?.setStream(media);
+        settings.audio = media.getAudioTracks().length > 0;
+        await loadDevices();
+      } catch {
+        /* keep the original error below */
+      }
       error = describeError(err);
     } finally {
       changing = false;
     }
+  }
+
+  /**
+   * Applies settings pushed from the desktop app over WebSocket.
+   * Resolution, audio and the camera side need a media re-acquire; quality,
+   * fps and rotation can be changed on the live broadcaster.
+   */
+  function applyRemoteSettings(incoming) {
+    if (!incoming || typeof incoming !== 'object') return;
+
+    const next = { ...settings, ...incoming };
+    const deviceChanged =
+      incoming.deviceId !== undefined && incoming.deviceId !== selectedDevice;
+    const mediaChanged =
+      next.width !== settings.width ||
+      next.height !== settings.height ||
+      next.audio !== settings.audio ||
+      next.facing !== settings.facing ||
+      deviceChanged;
+    const changed =
+      mediaChanged ||
+      next.fps !== settings.fps ||
+      next.quality !== settings.quality ||
+      next.rotation !== settings.rotation ||
+      next.mirror !== settings.mirror ||
+      next.preview !== settings.preview;
+
+    if (!changed) return;
+
+    settings = next;
+    if (incoming.deviceId !== undefined) selectedDevice = incoming.deviceId;
+
+    broadcaster?.updateSettings(settings);
+    broadcaster?.setRotation(settings.rotation);
+
+    // Settings pushed by the desktop are already persisted server-side;
+    // changeMedia must not PATCH them back (that would cause an echo loop).
+    if (live && mediaChanged) changeMedia(selectedDevice, { persist: false });
   }
 
   function changeQuality(event) {
@@ -365,7 +450,7 @@
         method: 'PATCH',
         headers: { 'x-camera-token': token },
         body: JSON.stringify({
-          settings: { ...settings, deviceId: selectedDevice || undefined }
+          settings: { ...settings, deviceId: selectedDevice }
         })
       }).catch(() => {});
     }, 500);
@@ -373,6 +458,9 @@
 
   function handleEvent({ type, payload }) {
     switch (type) {
+      case 'settings':
+        applyRemoteSettings(payload);
+        break;
       case 'open':
       case 'hello':
         connState = 'online';
@@ -635,7 +723,7 @@
           <div class="control-grid">
             <div class="field">
               <label for="device">Camera</label>
-              <select id="device" class="select" bind:value={selectedDevice} onchange={changeMedia} disabled={!live}>
+              <select id="device" class="select" value={selectedDevice} onchange={(e) => changeMedia(e.currentTarget.value)} disabled={!live}>
                 <option value="">Default camera</option>
                 {#each devices as device (device.id)}
                   <option value={device.id}>{device.label}</option>

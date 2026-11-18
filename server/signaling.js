@@ -7,6 +7,13 @@ import { events } from './events.js';
 
 const HEARTBEAT_MS = 25000;
 
+// Push settings changed from the desktop app (or another client) to the
+// phone that is currently publishing this camera.
+events.on('camera-settings', ({ cameraId, settings }) => {
+  const rt = runtimeFor(cameraId);
+  if (rt.publisher) send(rt.publisher, { t: 'settings', settings });
+});
+
 function normalizeMode(value) {
   return value === 'ws' || value === 'mjpeg' ? 'ws' : 'webrtc';
 }

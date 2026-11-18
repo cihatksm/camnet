@@ -343,6 +343,46 @@
         text-align: left;
         margin-top: 9px;
       }
+      .settings-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+      }
+      .settings-grid .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .settings-grid label {
+        font-size: 10.5px;
+        font-weight: 600;
+        color: var(--dim);
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+      .settings-grid .vcam-select {
+        width: 100%;
+      }
+      .settings-toggles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .settings-toggles label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+      .settings-line {
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--dim);
+      }
       .count {
         text-align: center;
         font-size: 12px;
@@ -568,6 +608,69 @@
         </div>
 
         <div class="card">
+          <div class="row"><label>Stream settings</label></div>
+          <div class="vcam-row" style="margin-bottom: 9px">
+            <select id="settings-camera" class="vcam-select"></select>
+          </div>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="settings-resolution">Resolution</label>
+              <select id="settings-resolution" class="vcam-select">
+                <option value="1920x1080">1080p · 1920×1080</option>
+                <option value="1280x720">720p · 1280×720</option>
+                <option value="960x540">540p · 960×540</option>
+                <option value="640x360">360p · 640×360</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="settings-fps">Frame rate</label>
+              <select id="settings-fps" class="vcam-select">
+                <option value="30">30 fps</option>
+                <option value="24">24 fps</option>
+                <option value="15">15 fps</option>
+                <option value="10">10 fps</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="settings-quality">Quality</label>
+              <select id="settings-quality" class="vcam-select">
+                <option value="0.9">High</option>
+                <option value="0.72">Balanced</option>
+                <option value="0.55">Low bandwidth</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="settings-rotation">Rotation</label>
+              <select id="settings-rotation" class="vcam-select">
+                <option value="0">0° (normal)</option>
+                <option value="90">90° clockwise</option>
+                <option value="180">180°</option>
+                <option value="270">270° clockwise</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="settings-facing">Camera side</label>
+              <select id="settings-facing" class="vcam-select">
+                <option value="current">Phone's selection</option>
+                <option value="front">Front camera</option>
+                <option value="back">Back camera</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-toggles">
+            <label><input type="checkbox" id="settings-mirror" /> Mirror preview</label>
+            <label><input type="checkbox" id="settings-audio" /> Microphone</label>
+            <label><input type="checkbox" id="settings-preview" /> Show preview</label>
+          </div>
+          <div class="settings-line" id="settings-status">Select a camera to edit its stream settings.</div>
+          <div class="vcam-error" id="settings-error"></div>
+          <div class="hint left">
+            Changes are saved on the server and applied live to the phone. Choose the exact lens
+            on the phone itself.
+          </div>
+        </div>
+
+        <div class="card">
           <div class="row">
             <label>This computer</label>
             <div class="url-line"><code id="local">—</code><button data-for="local">Copy</button></div>
@@ -668,6 +771,8 @@
       let nativeActive = false;
       let nativeBusy = false;
       let nativeRegistered = false;
+      let camerasCache = [];
+      let settingsBusy = false;
 
       const THEME_KEY = 'camnet-theme';
       const THEMES = ['system', 'light', 'dark'];
@@ -757,8 +862,11 @@
       async function loadVcamCameras() {
         try {
           const cameras = await window.camnet.getCameras();
+          camerasCache = cameras || [];
           fillCameraSelect($('vcam-select'), cameras);
           fillCameraSelect($('native-select'), cameras);
+          fillCameraSelect($('settings-camera'), cameras);
+          if (!settingsBusy) syncSettingsForm();
         } catch {
           /* ignore */
         }
@@ -899,6 +1007,105 @@
       $('native-select').addEventListener('change', refreshNative);
       $('open-device-manager').addEventListener('click', () => window.camnet.openDeviceManager());
       $('open-camera-settings').addEventListener('click', () => window.camnet.openCameraSettings());
+
+      function setSelectValue(select, value) {
+        if (![...select.options].some((option) => option.value === value)) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value;
+          select.appendChild(option);
+        }
+        select.value = value;
+      }
+
+      function syncSettingsForm() {
+        const id = $('settings-camera').value;
+        const camera = camerasCache.find((item) => item.id === id);
+        if (!camera) {
+          $('settings-status').textContent = 'Select a camera to edit its stream settings.';
+          return;
+        }
+
+        const s = camera.settings || {};
+        setSelectValue($('settings-resolution'), `${s.width}x${s.height}`);
+        setSelectValue($('settings-fps'), String(s.fps));
+        setSelectValue($('settings-quality'), String(s.quality));
+        setSelectValue($('settings-rotation'), String(s.rotation));
+        $('settings-facing').value = s.deviceId
+          ? 'current'
+          : s.facing === 'environment'
+            ? 'back'
+            : 'front';
+        $('settings-mirror').checked = Boolean(s.mirror);
+        $('settings-audio').checked = Boolean(s.audio);
+        $('settings-preview').checked = Boolean(s.preview);
+        $('settings-status').textContent = `${camera.name} · ${
+          camera.online ? 'live' : 'offline'
+        } · saved on the server`;
+      }
+
+      async function saveStreamSettings() {
+        if (settingsBusy) return;
+        const id = $('settings-camera').value;
+        if (!id) return;
+
+        const [width, height] = $('settings-resolution').value.split('x').map(Number);
+        const patch = {
+          width,
+          height,
+          fps: Number($('settings-fps').value),
+          quality: Number($('settings-quality').value),
+          rotation: Number($('settings-rotation').value),
+          mirror: $('settings-mirror').checked,
+          audio: $('settings-audio').checked,
+          preview: $('settings-preview').checked
+        };
+
+        const side = $('settings-facing').value;
+        if (side === 'front') {
+          patch.facing = 'user';
+          patch.deviceId = '';
+        } else if (side === 'back') {
+          patch.facing = 'environment';
+          patch.deviceId = '';
+        }
+
+        settingsBusy = true;
+        $('settings-error').textContent = '';
+        $('settings-status').textContent = 'Saving…';
+        try {
+          const camera = await window.camnet.updateCameraSettings(id, patch);
+          if (!camera) throw new Error('Camera not found.');
+          const index = camerasCache.findIndex((item) => item.id === id);
+          if (index >= 0) {
+            camerasCache[index] = { ...camerasCache[index], settings: camera.settings };
+          }
+          $('settings-status').textContent = `Saved · ${camera.name} · ${
+            camera.online ? 'live' : 'offline'
+          }`;
+          toast('Stream settings saved');
+        } catch (err) {
+          $('settings-error').textContent =
+            err.message || 'Could not update the stream settings.';
+          $('settings-status').textContent = 'Not saved';
+        } finally {
+          settingsBusy = false;
+        }
+      }
+
+      $('settings-camera').addEventListener('change', syncSettingsForm);
+      for (const id of [
+        'settings-resolution',
+        'settings-fps',
+        'settings-quality',
+        'settings-rotation',
+        'settings-facing',
+        'settings-mirror',
+        'settings-audio',
+        'settings-preview'
+      ]) {
+        $(id).addEventListener('change', saveStreamSettings);
+      }
 
       function toast(message) {
         const wrap = $('toasts');

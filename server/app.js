@@ -14,6 +14,7 @@ import {
 import { dropRuntime, publicCamera, runtimeFor } from './state.js';
 import { attachMjpeg } from './mjpeg.js';
 import { getLanIps } from './util.js';
+import { events } from './events.js';
 import { startVirtualCamera as startObsVirtualCamera, stopVirtualCamera as stopObsVirtualCamera, virtualCameraStatus as obsVirtualCameraStatus } from './obs.js';
 import {
   registerCom as registerNativeVirtualCamera,
@@ -173,6 +174,11 @@ export function createApp() {
       name: req.body?.name,
       settings: req.body?.settings
     });
+    if (camera) {
+      // Keep an already-connected phone in sync when settings change
+      // (for example from the desktop app or another browser).
+      events.emit('camera-settings', { cameraId: camera.id, settings: camera.settings });
+    }
     res.json({ camera: publicCamera(camera) });
   });
 

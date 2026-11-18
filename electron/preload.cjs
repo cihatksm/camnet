@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('camnet', {
   onStartError: (callback) => ipcRenderer.on('start-error', (_event, message) => callback(message)),
   getPermissions: () => ipcRenderer.invoke('get-permissions'),
   getCameras: () => ipcRenderer.invoke('get-cameras'),
+  updateCameraSettings: (id, settings) => ipcRenderer.invoke('update-camera-settings', id, settings),
   deleteCamera: (id) => ipcRenderer.invoke('delete-camera', id),
   removeFirewallRule: () => ipcRenderer.invoke('remove-firewall-rule'),
   addFirewallRule: () => ipcRenderer.invoke('add-firewall-rule'),

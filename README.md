@@ -18,6 +18,7 @@ CamNet runs a small local server. Any device on the same network opens the web a
 - **Battery saver mode** and automatic low-battery suggestion to reduce phone drain.
 - **Portable desktop app** (single `.exe`) with a control panel, QR code, and a **Settings &amp; Permissions** panel for managing the firewall rule and registered cameras.
 - **Windows camera without OBS** — a system-wide Media Foundation virtual camera that appears in Windows Camera, Teams, Zoom, Discord and browsers.
+- **Desktop stream settings** — change resolution, frame rate, quality, rotation, camera side, mirror, microphone and preview from the desktop app; changes are pushed live to the phone while it is streaming.
 - **Light / dark theme** that follows the system, with a per-device toggle.
 - **Stable camera identity per device** — reopening the app resumes the same camera instead of creating duplicates.
 - **Live notifications** in the desktop app when a device connects or disconnects.
@@ -87,6 +88,7 @@ What it does:
 - Starts the HTTP + HTTPS server automatically.
 - Opens a small control panel with the addresses, copy buttons, a **QR code** for phones, the camera count, a **Cameras** tab for deleting cameras, a **Settings &amp; Permissions** tab for firewall rule management, and **Open in browser** / **Quit**.
 - **Windows Virtual Camera — no OBS**: registers and starts a system-wide camera. It appears in Windows Camera, Teams, Zoom, Discord, browsers and **Settings → Bluetooth &amp; devices → Cameras**; Device Manager lists virtual cameras under **Software devices**.
+- **Stream settings** card: pick a camera and edit resolution, frame rate, quality, rotation, camera side, mirror, microphone and preview. Settings are saved on the server and **applied live** to a phone that is already streaming.
 - Stores cameras, settings and certificates in **`~/.camnet`** (portable: in the user's profile folder, not next to the executable).
 - Copies the virtual camera media source to `C:\ProgramData\CamNet\vcam` so the Windows Frame Server services can load it.
 
