@@ -221,9 +221,24 @@
     return { video, audio };
   }
 
+  async function openMedia(constraints, attempts = 3) {
+    let lastError;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        lastError = err;
+        // Android may keep the previous camera for a moment after stop().
+        if (err?.name !== 'NotReadableError' || attempt === attempts - 1) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    }
+    throw lastError;
+  }
+
   async function getMedia({ allowDefaultFallback = false } = {}) {
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints());
+      return await openMedia(constraints());
     } catch (err) {
       const retryable =
         err?.name === 'OverconstrainedError' ||
@@ -235,13 +250,43 @@
       // not silently fall back to the front camera: the user explicitly
       // asked for the other camera.
       try {
-        return await navigator.mediaDevices.getUserMedia(constraints(true));
+        return await openMedia(constraints(true));
       } catch (retryErr) {
         if (allowDefaultFallback && selectedDevice) {
           selectedDevice = '';
-          return navigator.mediaDevices.getUserMedia(constraints(true));
+          return openMedia(constraints(true));
         }
         throw retryErr;
+      }
+    }
+  }
+
+  /**
+   * Fully releases the current camera before opening another one.
+   * Detaching the preview and the broadcaster's hidden video is important:
+   * otherwise some Android browsers keep the camera device busy.
+   */
+  function releaseCurrentCamera() {
+    if (videoEl) {
+      try {
+        videoEl.pause();
+      } catch {
+        /* ignore */
+      }
+      videoEl.srcObject = null;
+    }
+
+    try {
+      broadcaster?.stopCapture?.();
+    } catch {
+      /* ignore */
+    }
+
+    for (const track of stream?.getTracks?.() ?? []) {
+      try {
+        track.stop();
+      } catch {
+        /* ignore */
       }
     }
   }
@@ -320,9 +365,10 @@
     changing = true;
     error = '';
 
-    // Android only allows one camera to be opened at a time. Release the
-    // current video track before opening the requested camera.
-    for (const track of stream?.getVideoTracks?.() ?? []) track.stop();
+    // Release the preview, the broadcaster capture and every track so the
+    // previous camera is actually closed before opening the new one.
+    releaseCurrentCamera();
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     try {
       const media = await getMedia();
@@ -338,6 +384,7 @@
     } catch (err) {
       // Restore the previous camera so the broadcast does not stay dead.
       selectedDevice = previousDevice;
+      await new Promise((resolve) => setTimeout(resolve, 200));
       try {
         const media = await getMedia();
         stream = media;
@@ -431,12 +478,24 @@
     if (!navigator.mediaDevices?.enumerateDevices) return;
     try {
       const list = await navigator.mediaDevices.enumerateDevices();
-      devices = list
+      const mapped = list
         .filter((device) => device.kind === 'videoinput')
         .map((device, index) => ({
           id: device.deviceId,
           label: device.label || `Camera ${index + 1}`
         }));
+
+      // Some Android browsers temporarily omit the inactive camera while
+      // another one is open. Keep previously seen cameras so the user can
+      // switch back to them.
+      const merged = [...mapped];
+      for (const device of devices) {
+        if (!device.id) continue;
+        if (merged.some((item) => item.id === device.id)) continue;
+        if (merged.some((item) => item.label === device.label)) continue;
+        merged.push(device);
+      }
+      devices = merged;
     } catch {
       /* ignore */
     }
@@ -723,7 +782,7 @@
           <div class="control-grid">
             <div class="field">
               <label for="device">Camera</label>
-              <select id="device" class="select" value={selectedDevice} onchange={(e) => changeMedia(e.currentTarget.value)} disabled={!live}>
+              <select id="device" class="select" value={selectedDevice} onchange={(e) => changeMedia(e.currentTarget.value)} disabled={!live || changing}>
                 <option value="">Default camera</option>
                 {#each devices as device (device.id)}
                   <option value={device.id}>{device.label}</option>
